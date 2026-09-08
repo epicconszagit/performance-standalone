@@ -1,0 +1,31 @@
+{
+    "name": "Epic Organizational Dashboard",
+    "short_name": "Epic Dashboard",
+    "description": "Internal Performance & Operations Management System for Epic International Consultants.",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#0f172a",
+    "theme_color": "#0f172a",
+    "orientation": "any",
+    "icons": [
+        {
+            "src": "https://media.base44.com/images/public/6a5df9c009518866564e2bed/28390cb4e_image.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "https://media.base44.com/images/public/6a5df9c009518866564e2bed/28390cb4e_image.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "https://media.base44.com/images/public/6a5df9c009518866564e2bed/28390cb4e_image.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}
