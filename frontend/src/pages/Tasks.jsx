@@ -193,15 +193,6 @@ export default function Tasks() {
           const emp = employees.find((e) => e.id === empId);
           if (emp) {
             await createNotification(emp.user_id || empId, empId, "New Task Assigned", `You have been assigned: "${data.title}"`, "task_assigned", created.id, "/tasks");
-            if (emp.email) {
-              try {
-                await SendEmail({
-                  to: emp.email,
-                  subject: "New Task Assigned",
-                  body: `Hello ${emp.full_name},\n\nYou have been assigned a new task:\n\n"${data.title}"\n\n${data.description ? data.description + "\n\n" : ""}${data.deadline ? "Deadline: " + formatDateTime(data.deadline) + "\n\n" : ""}Please log in to the Epic Organizational Dashboard to view and start this task.\n\n— ${performer.name}`,
-                });
-              } catch (e) { }
-            }
           }
         }
         toast({ title: "Created", description: "Task assigned successfully" });

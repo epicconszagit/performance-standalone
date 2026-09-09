@@ -65,6 +65,7 @@ class Employee(BaseModel):
 
     full_name = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), nullable=False)
+    personal_email = db.Column(db.String(255))
     phone = db.Column(db.String(50))
     user_id = db.Column(db.String(36))
     department_id = db.Column(db.String(36))
@@ -220,6 +221,9 @@ class Report(BaseModel):
     file_url = db.Column(db.String(500))
     file_name = db.Column(db.String(255))
     created_by_id = db.Column(db.String(36))
+    submitted_to_ids = db.Column(db.JSON, default=list)
+    submitted_to_names = db.Column(db.JSON, default=list)
+    is_confidential = db.Column(db.Boolean, default=False)
 
 
 class Notification(BaseModel):
@@ -273,8 +277,8 @@ class PerformanceReport(BaseModel):
 class CompanyBranding(BaseModel):
     __tablename__ = "company_brandings"
 
-    company_name = db.Column(db.String(255), nullable=False, default="Epic International Consultants")
-    tagline = db.Column(db.String(255), default="Excellence in Consulting")
+    company_name = db.Column(db.String(255), nullable=False, default="EPIC TASK PERFORMANCE TRACKING SYSTEM")
+    tagline = db.Column(db.String(255), default="Task & Performance Management")
     logo_url = db.Column(db.String(500))
     address = db.Column(db.String(500))
     phone = db.Column(db.String(50))

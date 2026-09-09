@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
-import { User as UserIcon, Upload, Save, Cake, Mail, Briefcase, Building2 } from "lucide-react";
-import { getMyProfile, updateMyProfile } from "@/api/profile";
+import { User as UserIcon, Upload, Save, Cake, Mail, Briefcase, Building2, BadgeCheck, KeyRound, Lock } from "lucide-react";
+import { getMyProfile, updateMyProfile, changePassword } from "@/api/profile";
 import { UploadFile } from "@/api/integrations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,13 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [form, setForm] = useState({ phone: "", date_of_birth: "", address: "", avatar_url: "" });
+  const [passwordForm, setPasswordForm] = useState({
+    old_password: "",
+    new_password: "",
+    confirm_password: "",
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -67,6 +73,41 @@ export default function Profile() {
     }
   };
 
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (!passwordForm.old_password) {
+      toast({ title: "Validation Error", description: "Please enter your current password", variant: "destructive" });
+      return;
+    }
+    if (!passwordForm.new_password || passwordForm.new_password.length < 8) {
+      toast({ title: "Validation Error", description: "New password must be at least 8 characters long", variant: "destructive" });
+      return;
+    }
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      toast({ title: "Validation Error", description: "New password and confirmation do not match", variant: "destructive" });
+      return;
+    }
+    if (passwordForm.old_password === passwordForm.new_password) {
+      toast({ title: "Validation Error", description: "New password must be different from current password", variant: "destructive" });
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const res = await changePassword(passwordForm);
+      toast({ title: "Password Changed", description: res.message || "Your password has been changed successfully." });
+      setPasswordForm({ old_password: "", new_password: "", confirm_password: "" });
+    } catch (err) {
+      toast({
+        title: "Error Changing Password",
+        description: err.message || "Failed to change password. Please verify your current password.",
+        variant: "destructive",
+      });
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   const initials = (employee?.full_name || user?.full_name || "U")
     .split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
@@ -74,14 +115,79 @@ export default function Profile() {
     return <div className="flex items-center justify-center h-96"><div className="w-8 h-8 border-4 border-amber-400 border-t-transparent rounded-full animate-spin" /></div>;
   }
 
+  const renderPasswordChangeSection = () => (
+    <form onSubmit={handleChangePassword} className="bg-white rounded-xl border border-slate-200 p-6 space-y-6">
+      <div>
+        <div className="flex items-center gap-2">
+          <KeyRound className="w-5 h-5 text-amber-500" />
+          <h2 className="text-lg font-semibold text-slate-900">Change Password</h2>
+        </div>
+        <p className="text-xs text-slate-500 mt-1">Update your account password by confirming your current password and choosing a new one.</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <Label htmlFor="current-password">Current Password</Label>
+          <Input
+            id="current-password"
+            type="password"
+            value={passwordForm.old_password}
+            onChange={(e) => setPasswordForm({ ...passwordForm, old_password: e.target.value })}
+            placeholder="••••••••"
+            autoComplete="current-password"
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="new-password">New Password</Label>
+          <Input
+            id="new-password"
+            type="password"
+            value={passwordForm.new_password}
+            onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
+            placeholder="Min. 8 characters"
+            autoComplete="new-password"
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="confirm-password">Confirm New Password</Label>
+          <Input
+            id="confirm-password"
+            type="password"
+            value={passwordForm.confirm_password}
+            onChange={(e) => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
+            placeholder="Repeat new password"
+            autoComplete="new-password"
+            required
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end pt-4 border-t border-slate-100">
+        <Button type="submit" disabled={changingPassword} className="bg-slate-800 hover:bg-slate-900 text-white">
+          <Lock className="w-4 h-4 mr-1.5" />
+          {changingPassword ? "Changing Password..." : "Change Password"}
+        </Button>
+      </div>
+    </form>
+  );
+
   if (!employee) {
     return (
-      <div className="max-w-3xl">
+      <div className="space-y-6 max-w-3xl">
+        <div>
+          <h1 className="text-2xl font-heading font-bold text-slate-900">My Profile</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage your account details and credentials</p>
+        </div>
+
         <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
           <UserIcon className="w-10 h-10 text-slate-300 mx-auto mb-3" />
           <p className="text-slate-500">No staff record is linked to your account yet.</p>
           <p className="text-xs text-slate-400 mt-1">Contact an administrator if this seems wrong.</p>
         </div>
+
+        {renderPasswordChangeSection()}
       </div>
     );
   }
@@ -104,7 +210,14 @@ export default function Profile() {
             )}
           </div>
           <div className="flex-1">
-            <p className="text-lg font-semibold text-slate-900">{employee.full_name}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-lg font-semibold text-slate-900">{employee.full_name}</p>
+              {employee.employee_id_code && (
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                  {employee.employee_id_code}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-400">{role}</p>
             <label className="cursor-pointer inline-flex items-center gap-2 mt-2 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs text-slate-600">
               <Upload className="w-3.5 h-3.5" /> {uploading ? "Uploading..." : "Change Photo"}
@@ -116,8 +229,12 @@ export default function Profile() {
         {/* Read-only employment details */}
         <div className="border-t border-slate-100 pt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <Label className="text-slate-400 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Company Email</Label>
-            <p className="text-sm text-slate-700 mt-1">{employee.email}</p>
+            <Label className="text-slate-400 flex items-center gap-1.5"><BadgeCheck className="w-3.5 h-3.5 text-amber-500" /> Employee ID</Label>
+            <p className="text-sm font-mono font-semibold text-slate-900 mt-1">{employee.employee_id_code || "—"}</p>
+          </div>
+          <div>
+            <Label className="text-slate-400 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Official Company Email</Label>
+            <p className="text-sm font-medium text-slate-800 mt-1">{employee.email}</p>
           </div>
           <div>
             <Label className="text-slate-400 flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" /> Position</Label>
@@ -132,7 +249,6 @@ export default function Profile() {
             <p className="text-sm text-slate-700 mt-1">{employee.role}</p>
           </div>
         </div>
-        <p className="text-xs text-slate-400 -mt-2">Employment details are managed by an administrator. Contact them to make changes.</p>
 
         {/* Editable personal details */}
         <div className="border-t border-slate-100 pt-6 space-y-4">
@@ -160,6 +276,9 @@ export default function Profile() {
           </Button>
         </div>
       </form>
+
+      {/* Change Password Card */}
+      {renderPasswordChangeSection()}
     </div>
   );
 }

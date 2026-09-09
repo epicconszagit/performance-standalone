@@ -15,8 +15,14 @@ class Config:
     # time. See scheduler.py for why that matters.
     DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
 
-    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key")
-    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "dev-jwt-secret-key")
+    SECRET_KEY = os.environ.get(
+        "SECRET_KEY",
+        "61220f6cb291cb7fae1868c900272266451b2243233fac4ce7de8c5db90a954c",
+    )
+    JWT_SECRET_KEY = os.environ.get(
+        "JWT_SECRET_KEY",
+        "0dfc05450b2b90d9dff5ebbf79602fbbb3b459a02bc086a96c86dd59e9b8074e",
+    )
     JWT_ACCESS_TOKEN_EXPIRES_SECONDS = int(
         os.environ.get("JWT_ACCESS_TOKEN_EXPIRES_SECONDS", 60 * 60 * 24 * 7)
     )

@@ -49,7 +49,15 @@ def current_user():
     uid = get_jwt_identity()
     if not uid:
         return None
-    return User.query.get(uid)
+    user = User.query.get(uid)
+    if not user or user.status in ("inactive", "suspended", "terminated", "deleted"):
+        return None
+    if user.role != "admin" and user.status != "pending":
+        from ..models import Employee
+        emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
+        if not emp or emp.status != "active":
+            return None
+    return user
 
 
 def _is_admin(user):
@@ -73,11 +81,31 @@ def check_permission(rule, user, obj, owner_field):
             return True
         if obj is None:
             return True
-        return getattr(obj, owner_field, None) == user.id
+        owner_val = getattr(obj, owner_field, None)
+        if owner_val == user.id or str(owner_val) == str(user.id):
+            return True
+        from ..models import Employee
+        emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
+        if emp and (owner_val == emp.id or str(owner_val) == str(emp.id)):
+            return True
+        return False
     return False
 
 
-def register_entity(bp, model, name, create="any", update="any", delete="any", owner_field="created_by_id"):
+def register_entity(
+    bp,
+    model,
+    name,
+    create="any",
+    update="any",
+    delete="any",
+    owner_field="created_by_id",
+    list_filter=None,
+    before_delete=None,
+    before_update=None,
+    after_update=None,
+    after_create=None,
+):
     """Registers GET (list/filter), POST, PATCH, DELETE routes for one entity
     under /<name>, mirroring the base44 SDK's list/filter/create/update/delete shape.
     """
@@ -102,7 +130,12 @@ def register_entity(bp, model, name, create="any", update="any", delete="any", o
         if limit:
             query = query.limit(limit)
 
-        return jsonify([obj.to_dict() for obj in query.all()])
+        all_objs = query.all()
+        if list_filter:
+            user = current_user()
+            all_objs = list_filter(all_objs, user)
+
+        return jsonify([obj.to_dict() for obj in all_objs])
 
     def create_entity():
         user = current_user()
@@ -122,6 +155,11 @@ def register_entity(bp, model, name, create="any", update="any", delete="any", o
         except IntegrityError:
             db.session.rollback()
             return jsonify({"error": "Could not save - a database constraint was violated."}), 400
+        if after_create:
+            try:
+                after_create(obj, user, data)
+            except Exception:
+                pass
         return jsonify(obj.to_dict()), 201
 
     def update_entity(entity_id):
@@ -129,11 +167,17 @@ def register_entity(bp, model, name, create="any", update="any", delete="any", o
         user = current_user()
         if not check_permission(update, user, obj, owner_field):
             return jsonify({"error": "forbidden"}), 403
+        if before_update:
+            err = before_update(obj, user)
+            if err:
+                return jsonify({"error": err}), 403
         data = request.get_json(silent=True) or {}
         _apply_fields(model, obj, data)
         missing = _missing_required_fields(model, obj)
         if missing:
             return jsonify({"error": f"Missing required field(s): {', '.join(missing)}"}), 400
+        if after_update:
+            after_update(obj, user)
         try:
             db.session.commit()
         except IntegrityError:
@@ -146,6 +190,10 @@ def register_entity(bp, model, name, create="any", update="any", delete="any", o
         user = current_user()
         if not check_permission(delete, user, obj, owner_field):
             return jsonify({"error": "forbidden"}), 403
+        if before_delete:
+            err = before_delete(obj, user)
+            if err:
+                return jsonify({"error": err}), 400
         db.session.delete(obj)
         db.session.commit()
         return "", 204

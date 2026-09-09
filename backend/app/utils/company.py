@@ -25,3 +25,14 @@ def generate_department_email_base(name):
 
 def generate_employee_id_code():
     return f"EIC-{uuid.uuid4().hex[:6].upper()}"
+
+
+def generate_unique_company_email(full_name):
+    from ..models import Employee, User
+    base = generate_employee_email_base(full_name)
+    candidate = f"{base}@{EMAIL_DOMAIN}"
+    suffix = 1
+    while User.query.filter_by(email=candidate).first() or Employee.query.filter_by(email=candidate).first():
+        suffix += 1
+        candidate = f"{base}{suffix}@{EMAIL_DOMAIN}"
+    return candidate

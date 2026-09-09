@@ -21,20 +21,26 @@ def send_email(to, subject, body):
     if not to:
         return False
 
-    if not (SMTP_USERNAME and SMTP_PASSWORD):
+    host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    username = os.environ.get("SMTP_USERNAME")
+    password = os.environ.get("SMTP_PASSWORD")
+    sender = os.environ.get("SMTP_FROM") or username
+
+    if not (username and password):
         logger.info("STUB EMAIL -> to=%s subject=%r\n%s", to, subject, body)
         return True
 
     msg = MIMEText(body)
     msg["Subject"] = subject
-    msg["From"] = SMTP_FROM
+    msg["From"] = f"EPIC TASK PERFORMANCE TRACKING SYSTEM <{sender}>"
     msg["To"] = to
 
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(host, port) as server:
             server.starttls()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.sendmail(SMTP_FROM, [to], msg.as_string())
+            server.login(username, password)
+            server.sendmail(sender, [to], msg.as_string())
         return True
     except Exception:
         logger.exception("Failed to send email to %s", to)

@@ -35,12 +35,13 @@ export async function checkDeadlineReminders() {
       const assigneeIds = task.assigned_to_ids || [];
       for (const empId of assigneeIds) {
         const emp = empMap.get(empId);
-        if (!emp || !emp.email) continue;
+        const targetEmail = emp.personal_email || emp.email;
+        if (!emp || !targetEmail) continue;
         try {
           await SendEmail({
-            to: emp.email,
+            to: targetEmail,
             subject: `Task Deadline Approaching: "${task.title}"`,
-            body: `Hi ${emp.full_name},\n\nYour assigned task "${task.title}" is due on ${formatDateTime(task.deadline)}, which is within 24 hours.\n\nPlease ensure it is completed before the deadline.\n\n— EPIC International Consultants Group`,
+            body: `Hi ${emp.full_name},\n\nYour assigned task "${task.title}" is due on ${formatDateTime(task.deadline)}, which is within 24 hours.\n\nPlease ensure it is completed before the deadline.\n\n— EPIC TASK PERFORMANCE TRACKING SYSTEM`,
           });
         } catch (e) { }
         try {

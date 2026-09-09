@@ -47,13 +47,15 @@ const NAV_ITEMS = [
 
 function Logo() {
   return (
-    <div className="flex items-center gap-3 px-2">
-      <div className="w-11 h-11 rounded-full overflow-hidden bg-white shrink-0 ring-2 ring-amber-400/50 shadow">
-        <Image src={LOGO_URL} alt="EPIC International Consultants Group" fittingType="fit" className="w-full h-full" />
+    <div className="flex items-center gap-2.5 px-1 min-w-0">
+      <div className="w-10 h-10 rounded-full overflow-hidden bg-white shrink-0 ring-2 ring-amber-400/50 shadow">
+        <Image src={LOGO_URL} alt="EPIC TASK PERFORMANCE TRACKING SYSTEM" fittingType="fit" className="w-full h-full" />
       </div>
-      <div className="leading-tight">
-        <p className="font-heading font-bold text-white text-sm tracking-wide">EPIC</p>
-        <p className="text-[10px] text-slate-400 tracking-wider uppercase">Intl. Consultants Group</p>
+      <div className="leading-tight min-w-0">
+        <p className="font-heading font-bold text-white text-xs tracking-wider uppercase">EPIC</p>
+        <p className="text-[9.5px] text-amber-400 font-semibold tracking-tight uppercase leading-tight mt-0.5">
+          TASK PERFORMANCE TRACKING SYSTEM
+        </p>
       </div>
     </div>
   );
@@ -237,11 +239,11 @@ export default function Layout() {
             <button className="lg:hidden text-slate-600" onClick={() => setSidebarOpen(true)}>
               <Menu className="w-6 h-6" />
             </button>
-            <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400">
+            <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500">
               <Shield className="w-3.5 h-3.5 text-amber-500" />
-              <span className="font-medium">Internal System</span>
+              <span className="font-semibold text-slate-800 tracking-wide uppercase text-[11px]">EPIC TASK PERFORMANCE TRACKING SYSTEM</span>
               <span className="text-slate-300">•</span>
-              <span>Authorized Personnel Only</span>
+              <span className="text-slate-400">Authorized Personnel Only</span>
             </div>
           </div>
 

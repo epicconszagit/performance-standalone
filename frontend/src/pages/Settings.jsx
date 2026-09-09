@@ -34,8 +34,8 @@ function BrandingSettings() {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    company_name: "Epic International Consultants",
-    tagline: "Excellence in Consulting",
+    company_name: "EPIC TASK PERFORMANCE TRACKING SYSTEM",
+    tagline: "Task & Performance Management",
     logo_url: "",
     address: "",
     phone: "",
@@ -52,8 +52,8 @@ function BrandingSettings() {
           if (data && data.length > 0) {
             setBranding(data[0]);
             setForm({
-              company_name: data[0].company_name || "Epic International Consultants",
-              tagline: data[0].tagline || "Excellence in Consulting",
+              company_name: data[0].company_name || "EPIC TASK PERFORMANCE TRACKING SYSTEM",
+              tagline: data[0].tagline || "Task & Performance Management",
               logo_url: data[0].logo_url || "",
               address: data[0].address || "",
               phone: data[0].phone || "",

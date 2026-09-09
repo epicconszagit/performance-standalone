@@ -7,7 +7,7 @@ from ..extensions import db
 from ..models import Department, Employee, User
 from ..utils.company import EMAIL_DOMAIN, generate_employee_email_base, generate_employee_id_code
 from ..utils.email import send_email
-from ..utils.sms import send_sms
+from ..utils.sms import normalize_phone_number, send_sms
 from .generic import current_user
 
 pending_users_bp = Blueprint("pending_users", __name__)
@@ -62,7 +62,7 @@ def approve_user(user_id):
     employee = Employee(
         full_name=full_name,
         email=company_email,
-        phone=data.get("phone") or target.phone or "",
+        phone=normalize_phone_number(data.get("phone") or target.phone or ""),
         user_id=target.id,
         department_id=department_id,
         department_name=department.name if department else "",
@@ -83,12 +83,12 @@ def approve_user(user_id):
     db.session.commit()
 
     notify_message = (
-        f"Hi {full_name}, your account has been approved. "
+        f"Hi {full_name}, your account has been approved on the EPIC TASK PERFORMANCE TRACKING SYSTEM. "
         f"Your new login email is {company_email} - use your existing password to log in."
     )
     email_sent = False
     if target.personal_email:
-        email_sent = send_email(to=target.personal_email, subject="Your account has been approved", body=notify_message)
+        email_sent = send_email(to=target.personal_email, subject="Your EPIC TASK PERFORMANCE TRACKING SYSTEM account has been approved", body=notify_message)
     sms_sent = send_sms(to=employee.phone, message=notify_message) if employee.phone else False
 
     return jsonify({

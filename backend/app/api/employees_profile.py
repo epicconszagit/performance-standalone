@@ -38,6 +38,13 @@ def update_my_profile():
     if employee is None:
         return jsonify({"error": "No employee record linked to this account"}), 404
 
+    is_admin_record = (
+        employee.role in ("Super Administrator", "Administrator")
+        or (employee.email and employee.email.lower() == "epiccons.za@gmail.com")
+    )
+    if is_admin_record and user.role != "admin":
+        return jsonify({"error": "Access Denied: Only administrators are authorized to edit an administrator profile."}), 403
+
     data = request.get_json(silent=True) or {}
     columns = {c.name: c for c in Employee.__table__.columns}
     for key, value in data.items():

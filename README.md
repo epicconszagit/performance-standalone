@@ -1,6 +1,6 @@
-# Performance (Standalone)
+# EPIC TASK PERFORMANCE TRACKING SYSTEM
 
-A self-hosted replacement for the Base44-backed Performance app: the same React frontend, backed by a Flask + MySQL (or SQLite for local dev) API you own.
+A self-hosted, full-stack Performance and Task Management platform: React frontend, backed by a Flask + PostgreSQL/MySQL/SQLite API.
 
 ## Structure
 

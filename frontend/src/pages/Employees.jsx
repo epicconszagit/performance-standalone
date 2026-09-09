@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
-import { Users, Plus, Pencil, Trash2, X, Search, Mail, Phone, CheckCircle2, UserCheck, UserPlus, Check, Ban } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, X, Search, Mail, Phone, CheckCircle2, UserCheck, UserPlus, Check, Ban, Send, BadgeCheck, Lock } from "lucide-react";
 import { Employee, Department } from "@/api/entities";
 import { listPendingUsers, approveUser, rejectUser } from "@/api/pendingUsers";
 import { onboardEmployee } from "@/api/staffOnboarding";
@@ -19,8 +19,20 @@ const ROLES = ["Super Administrator", "Administrator", "Secretary", "Department 
 const emptyApproveForm = { full_name: "", phone: "", department_id: "", position: "", role: "Staff Member", hire_date: "" };
 
 export default function Employees() {
-  const { performer } = useOutletContext();
+  const { performer, user, role } = useOutletContext();
   const { toast } = useToast();
+
+  const isCurrentAdmin = user?.role === "admin" || ["Super Administrator", "Administrator"].includes(role);
+
+  const isAdminProfile = (emp) => {
+    if (!emp) return false;
+    return (
+      emp.role === "Super Administrator" ||
+      emp.role === "Administrator" ||
+      (emp.email && emp.email.toLowerCase() === "epiccons.za@gmail.com") ||
+      (emp.user_id && emp.user_id === user?.id && user?.role === "admin")
+    );
+  };
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [pendingUsers, setPendingUsers] = useState([]);
@@ -66,16 +78,42 @@ export default function Employees() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ full_name: "", email: "", phone: "", department_id: "", position: "", role: "Staff Member", hire_date: "", status: "active", employee_id_code: "", manager_id: "" });
+    setForm({
+      full_name: "",
+      personal_email: "",
+      email: "",
+      phone: "",
+      department_id: "",
+      position: "",
+      role: "Staff Member",
+      hire_date: "",
+      status: "active",
+      employee_id_code: "",
+      manager_id: "",
+    });
     setShowForm(true);
   };
 
   const openEdit = (emp) => {
+    if (isAdminProfile(emp) && !isCurrentAdmin) {
+      toast({
+        title: "Access Denied",
+        description: "Only administrators are authorized to edit the administrator profile.",
+        variant: "destructive",
+      });
+      return;
+    }
     setEditing(emp);
     setForm({
-      full_name: emp.full_name || "", email: emp.email || "", phone: emp.phone || "",
-      department_id: emp.department_id || "", position: emp.position || "",
-      role: emp.role || "Staff Member", hire_date: emp.hire_date || "", status: emp.status || "active",
+      full_name: emp.full_name || "",
+      personal_email: emp.personal_email || "",
+      email: emp.email || "",
+      phone: emp.phone || "",
+      department_id: emp.department_id || "",
+      position: emp.position || "",
+      role: emp.role || "Staff Member",
+      hire_date: emp.hire_date || "",
+      status: emp.status || "active",
       employee_id_code: emp.employee_id_code || "",
       manager_id: emp.manager_id || "",
     });
@@ -84,12 +122,21 @@ export default function Employees() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (editing && isAdminProfile(editing) && !isCurrentAdmin) {
+      toast({
+        title: "Access Denied",
+        description: "Only administrators are authorized to edit the administrator profile.",
+        variant: "destructive",
+      });
+      return;
+    }
     const dept = departments.find((d) => d.id === form.department_id);
     const otherEmails = employees.filter((emp) => emp.id !== editing?.id).map((emp) => emp.email);
     const email = form.email?.trim() || generateUniqueEmail(generateEmployeeEmailBase(form.full_name), otherEmails);
     const data = {
       ...form,
       email,
+      personal_email: form.personal_email?.trim() || "",
       department_name: dept?.name || "",
       employee_id_code: form.employee_id_code?.trim() || (editing?.employee_id_code || `EIC-${Date.now().toString().slice(-6)}`),
     };
@@ -101,22 +148,38 @@ export default function Employees() {
       } else {
         const result = await onboardEmployee(data);
         await logAudit("Created Employee", "Employee", result.employee.id, data.full_name, performer, "New staff member added with login credentials");
-        const { email: emailSent, sms: smsSent } = result.notified;
+        const { email: emailSent, sms: smsSent, recipient } = result.notified || {};
         if (emailSent || smsSent) {
-          const channels = [emailSent && email, smsSent && data.phone].filter(Boolean).join(" and ");
+          const channels = [emailSent && (recipient || email), smsSent && data.phone].filter(Boolean).join(" and ");
           toast({ title: "Credentials sent", description: `Login details sent to ${channels}. They can now log in.` });
         } else {
-          toast({ title: "Staff member added", description: "Account created, but the email/phone on file couldn't be used to send credentials. Share their login details manually.", variant: "destructive" });
+          toast({ title: "Staff member added", description: "Account created, but credentials could not be dispatched automatically. Share their login details manually.", variant: "destructive" });
         }
       }
       setShowForm(false);
       loadData();
     } catch (e) {
-      toast({ title: "Error", description: "Failed to save staff member", variant: "destructive" });
+      toast({ title: "Error", description: e?.response?.data?.error || e?.message || "Failed to save staff member", variant: "destructive" });
     }
   };
 
   const handleToggleStatus = async (emp) => {
+    if (isAdminProfile(emp) && !isCurrentAdmin) {
+      toast({
+        title: "Access Denied",
+        description: "Only administrators are authorized to change an administrator's status.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (emp.email?.toLowerCase() === "epiccons.za@gmail.com" && emp.status === "active") {
+      toast({
+        title: "Action Denied",
+        description: "The primary administrator account cannot be deactivated.",
+        variant: "destructive",
+      });
+      return;
+    }
     const newStatus = emp.status === "active" ? "inactive" : "active";
     try {
       await Employee.update(emp.id, { status: newStatus });
@@ -129,6 +192,22 @@ export default function Employees() {
   };
 
   const handleDelete = async (emp) => {
+    if (isAdminProfile(emp) && !isCurrentAdmin) {
+      toast({
+        title: "Access Denied",
+        description: "Only administrators are authorized to delete an administrator profile.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (emp.email?.toLowerCase() === "epiccons.za@gmail.com") {
+      toast({
+        title: "Action Denied",
+        description: "The primary administrator account cannot be deleted.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!confirm(`Remove ${emp.full_name}? This cannot be undone.`)) return;
     try {
       await Employee.delete(emp.id);
@@ -285,7 +364,14 @@ export default function Employees() {
                         {emp.full_name?.split(" ").map((w) => w[0]).slice(0, 2).join("")}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-slate-800">{emp.full_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-slate-800">{emp.full_name}</p>
+                          {emp.employee_id_code && (
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                              {emp.employee_id_code}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-slate-400">{emp.position || emp.role}</p>
                       </div>
                     </div>
@@ -297,8 +383,8 @@ export default function Employees() {
                     <RoleBadge role={emp.role} />
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell">
-                    <p className="text-xs text-slate-500 flex items-center gap-1"><Mail className="w-3 h-3" /> {emp.email || "—"}</p>
-                    {emp.phone && <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5"><Phone className="w-3 h-3" /> {emp.phone}</p>}
+                    <p className="text-xs text-slate-700 font-medium flex items-center gap-1"><Mail className="w-3 h-3 text-slate-400" /> {emp.email || "—"}</p>
+                    {emp.phone && <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5"><Phone className="w-3 h-3 text-slate-400" /> {emp.phone}</p>}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
                     {emp.user_id ? (
@@ -319,11 +405,27 @@ export default function Employees() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => openEdit(emp)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><Pencil className="w-4 h-4" /></button>
-                      <button onClick={() => handleToggleStatus(emp)} className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-600 text-xs font-medium" title={emp.status === "active" ? "Deactivate" : "Activate"}>
-                        {emp.status === "active" ? "Deactivate" : "Activate"}
-                      </button>
-                      <button onClick={() => handleDelete(emp)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-500"><Trash2 className="w-4 h-4" /></button>
+                      {(!isAdminProfile(emp) || isCurrentAdmin) ? (
+                        <>
+                          <button onClick={() => openEdit(emp)} title="Edit staff member" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          {emp.email?.toLowerCase() !== "epiccons.za@gmail.com" && (
+                            <button onClick={() => handleToggleStatus(emp)} className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-600 text-xs font-medium" title={emp.status === "active" ? "Deactivate" : "Activate"}>
+                              {emp.status === "active" ? "Deactivate" : "Activate"}
+                            </button>
+                          )}
+                          {emp.email?.toLowerCase() !== "epiccons.za@gmail.com" && (
+                            <button onClick={() => handleDelete(emp)} title="Delete staff member" className="p-1.5 rounded-lg hover:bg-red-50 text-red-500">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-1 rounded-md" title="Only administrators can edit this profile">
+                          <Lock className="w-3 h-3 text-slate-400" /> Protected
+                        </span>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -348,31 +450,52 @@ export default function Employees() {
               <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label>Full Name *</Label>
-                  <Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required />
+                  <Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Jane Doe" required />
                 </div>
                 <div>
-                  <Label>Email</Label>
+                  <Label>Personal / Notification Email</Label>
+                  <Input
+                    type="email"
+                    value={form.personal_email}
+                    onChange={(e) => setForm({ ...form, personal_email: e.target.value })}
+                    placeholder="e.g. employee@gmail.com"
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">Credentials & temporary password will be sent here.</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label>Official Company Email</Label>
                   <Input
                     type="email"
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                     placeholder={form.full_name ? `${generateEmployeeEmailBase(form.full_name)}@${EMAIL_DOMAIN}` : "Auto-generated if left blank"}
                   />
+                  <p className="text-[11px] text-muted-foreground mt-1">Official username for logging in</p>
                 </div>
-              </div>
-              <div>
-                <Label>Employee ID</Label>
-                <Input value={form.employee_id_code} onChange={(e) => setForm({ ...form, employee_id_code: e.target.value })} placeholder="Auto-generated if left blank" />
+                <div>
+                  <Label className="flex items-center justify-between">
+                    <span>Employee ID</span>
+                    <span className="text-[10px] text-amber-600 font-semibold">Admin Editable</span>
+                  </Label>
+                  <Input
+                    value={form.employee_id_code}
+                    onChange={(e) => setForm({ ...form, employee_id_code: e.target.value })}
+                    placeholder="Auto-generated if left blank (e.g. EIC-XXXXXX)"
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">Displayed on profile as read-only</p>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Phone</Label>
-                  <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+263 77 123 4567" />
-                  {form.phone && !form.phone.trim().startsWith("+") && !editing && (
-                    <p className="text-xs text-red-500 mt-1">Needs a country code (e.g. +263...) or the SMS won't send.</p>
+                  <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="077 123 4567 or +263..." />
+                  {form.phone && form.phone.trim().startsWith("0") && (
+                    <p className="text-xs text-emerald-600 mt-1">✓ Local number (auto-formats as +263 {form.phone.trim().slice(1)})</p>
                   )}
                 </div>
                 <div>
@@ -395,7 +518,9 @@ export default function Employees() {
                   <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                      {(isCurrentAdmin ? ROLES : ROLES.filter((r) => !["Super Administrator", "Administrator"].includes(r))).map((r) => (
+                        <SelectItem key={r} value={r}>{r}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -464,10 +589,10 @@ export default function Employees() {
                   <Input
                     value={approveForm.phone}
                     onChange={(e) => setApproveForm({ ...approveForm, phone: e.target.value })}
-                    placeholder="+263 77 123 4567"
+                    placeholder="077 123 4567 or +263..."
                   />
-                  {approveForm.phone && !approveForm.phone.trim().startsWith("+") && (
-                    <p className="text-xs text-red-500 mt-1">Needs a country code (e.g. +263...) or the SMS won't send.</p>
+                  {approveForm.phone && approveForm.phone.trim().startsWith("0") && (
+                    <p className="text-xs text-emerald-600 mt-1">✓ Local number (auto-formats as +263 {approveForm.phone.trim().slice(1)})</p>
                   )}
                 </div>
                 <div>
