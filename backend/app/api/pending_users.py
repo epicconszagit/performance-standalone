@@ -8,6 +8,7 @@ from ..models import Department, Employee, User
 from ..utils.company import EMAIL_DOMAIN, generate_employee_email_base, generate_employee_id_code
 from ..utils.email import send_email
 from ..utils.sms import normalize_phone_number, send_sms
+from ..utils.validation import parse_flexible_date
 from .generic import current_user
 
 pending_users_bp = Blueprint("pending_users", __name__)
@@ -72,7 +73,7 @@ def approve_user(user_id):
     department = Department.query.get(department_id) if department_id else None
     employee_role = data.get("role") or "Staff Member"
     hire_date_raw = data.get("hire_date") or ""
-    hire_date = date.fromisoformat(hire_date_raw) if hire_date_raw else None
+    hire_date = parse_flexible_date(hire_date_raw)
     full_name = data.get("full_name") or target.full_name or target.email
 
     # Replace whatever email they signed up with with a standard company

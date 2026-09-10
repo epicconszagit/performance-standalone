@@ -10,7 +10,7 @@ from ..models import Employee, User
 from ..utils.company import generate_employee_id_code, generate_unique_company_email
 from ..utils.email import send_email
 from ..utils.sms import normalize_phone_number, send_sms
-from ..utils.validation import validate_registration_email
+from ..utils.validation import parse_flexible_date, validate_registration_email
 from .generic import current_user
 from .pending_users import ADMIN_EMPLOYEE_ROLES
 
@@ -70,7 +70,7 @@ def onboard_employee():
         company_email = generate_unique_company_email(full_name)
 
     hire_date_raw = data.get("hire_date") or ""
-    hire_date = date.fromisoformat(hire_date_raw) if hire_date_raw else None
+    hire_date = parse_flexible_date(hire_date_raw)
 
     temp_password = secrets.token_urlsafe(8)
     user = User(

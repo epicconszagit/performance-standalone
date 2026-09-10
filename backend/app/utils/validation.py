@@ -55,3 +55,23 @@ def validate_password(password):
     if not password or len(password) < MIN_PASSWORD_LENGTH:
         return False, f"Password must be at least {MIN_PASSWORD_LENGTH} characters."
     return True, None
+
+
+def parse_flexible_date(date_val):
+    if not date_val:
+        return None
+    from datetime import date, datetime
+    if isinstance(date_val, (datetime, date)):
+        return date_val.date() if isinstance(date_val, datetime) else date_val
+    s = str(date_val).strip()
+    clean_s = s.split("T")[0].strip()
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y", "%m-%d-%Y"):
+        try:
+            return datetime.strptime(clean_s, fmt).date()
+        except ValueError:
+            pass
+    try:
+        return date.fromisoformat(clean_s)
+    except Exception:
+        return None
+
