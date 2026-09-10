@@ -262,11 +262,13 @@ export default function Employees() {
       const result = await approveUser(approvingUser.id, approveForm);
       await logAudit("Approved Account", "Employee", approvingUser.id, approveForm.full_name, performer, `Approved ${approvingUser.email} as ${approveForm.role}`);
       const { email: emailSent, sms: smsSent } = result.notified || {};
-      if (emailSent || smsSent) {
-        const channels = [emailSent && (approvingUser.personal_email || approvingUser.email), smsSent && approveForm.phone].filter(Boolean).join(" and ");
-        toast({ title: "Credentials sent", description: `New login details sent to ${channels}. They can now log in.` });
+      const targetEmail = approvingUser.personal_email || approvingUser.email;
+      if (emailSent) {
+        toast({ title: "Approved & Credentials Sent", description: `Login details sent to email: ${targetEmail}. They can now log in.` });
+      } else if (smsSent) {
+        toast({ title: "Approved & SMS Sent", description: `Login details sent via SMS to ${approveForm.phone}.` });
       } else {
-        toast({ title: "Approved", description: `${approveForm.full_name || approvingUser.email} can now access the system, but the notification couldn't be sent - share their new login email manually.`, variant: "destructive" });
+        toast({ title: "Approved", description: `${approveForm.full_name || targetEmail} is approved, but email notification to ${targetEmail} could not be delivered. Please check email configuration.`, variant: "destructive" });
       }
       setApprovingUser(null);
       loadData();
