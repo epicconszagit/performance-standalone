@@ -109,14 +109,24 @@ def approve_user(user_id):
         f"Your new login email is {company_email} - use your existing password to log in."
     )
     email_sent = False
-    if target.personal_email:
-        email_sent = send_email(to=target.personal_email, subject="Your EPIC TASK PERFORMANCE TRACKING SYSTEM account has been approved", body=notify_message)
-    sms_sent = send_sms(to=employee.phone, message=notify_message) if employee.phone else False
+    sms_sent = False
+
+    try:
+        if target.personal_email:
+            email_sent = send_email(to=target.personal_email, subject="Your EPIC TASK PERFORMANCE TRACKING SYSTEM account has been approved", body=notify_message)
+    except Exception:
+        pass
+
+    try:
+        if employee.phone:
+            sms_sent = send_sms(to=employee.phone, message=notify_message)
+    except Exception:
+        pass
 
     return jsonify({
         "user": target.to_public_dict(),
         "employee": employee.to_dict(),
-        "notified": {"email": email_sent, "sms": sms_sent},
+        "notified": {"email": bool(email_sent), "sms": bool(sms_sent)},
     })
 
 
