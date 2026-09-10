@@ -16,6 +16,9 @@ def reset_database():
         print("RESETTING DATABASE FOR DEPLOYMENT (PRESERVING ADMIN ACCOUNT)")
         print("=" * 60)
 
+        # 0. Ensure all database tables exist
+        db.create_all()
+
         # 1. Identify existing admin account to preserve
         admin_email = "epiccons.za@gmail.com"
         admin_user = User.query.filter_by(email=admin_email).first() or User.query.filter_by(role="admin").first()
