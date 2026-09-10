@@ -35,8 +35,15 @@ def register():
     if not password_ok:
         return jsonify({"error": password_error}), 400
 
-    if User.query.filter_by(email=email).first():
-        return jsonify({"error": "an account with this email already exists"}), 409
+    existing_user = User.query.filter(
+        (db.func.lower(User.email) == email) | (db.func.lower(User.personal_email) == email)
+    ).first()
+    existing_emp = Employee.query.filter(
+        (db.func.lower(Employee.email) == email) | (db.func.lower(Employee.personal_email) == email)
+    ).first()
+
+    if existing_user or existing_emp:
+        return jsonify({"error": "An account with this email has already been created. Please log in or contact an administrator if you believe this is an error."}), 409
 
     # The very first account on a fresh install becomes an active admin
     # automatically - otherwise nobody would exist to approve anyone.
@@ -75,9 +82,15 @@ def check_email():
     if not email_ok:
         return jsonify({"valid": False, "error": email_err}), 200
 
-    existing = User.query.filter_by(email=email).first()
-    if existing:
-        return jsonify({"valid": False, "error": "An account with this email is already registered."}), 200
+    existing_user = User.query.filter(
+        (db.func.lower(User.email) == email) | (db.func.lower(User.personal_email) == email)
+    ).first()
+    existing_emp = Employee.query.filter(
+        (db.func.lower(Employee.email) == email) | (db.func.lower(Employee.personal_email) == email)
+    ).first()
+
+    if existing_user or existing_emp:
+        return jsonify({"valid": False, "error": "An account with this email has already been created."}), 200
 
     return jsonify({"valid": True, "message": "Valid email address."}), 200
 

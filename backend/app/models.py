@@ -154,6 +154,7 @@ class Meeting(BaseModel):
     created_by_id = db.Column(db.String(36))
     created_by_name = db.Column(db.String(255))
     department_id = db.Column(db.String(36))
+    meeting_type = db.Column(db.String(50), default="custom")
 
 
 class MeetingMinutes(BaseModel):

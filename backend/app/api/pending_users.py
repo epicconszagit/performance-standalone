@@ -46,6 +46,26 @@ def approve_user(user_id):
         return jsonify({"error": "forbidden"}), 403
 
     target = User.query.get_or_404(user_id)
+    if target.status != "pending":
+        return jsonify({"error": f"This user is not pending approval (current status: {target.status})."}), 400
+
+    existing_emp = Employee.query.filter_by(user_id=target.id).first()
+    if existing_emp:
+        return jsonify({"error": "A staff record has already been created for this user."}), 400
+
+    p_email = (target.personal_email or target.email or "").strip().lower()
+    if p_email:
+        conflict_user = User.query.filter(
+            User.id != target.id,
+            (db.func.lower(User.email) == p_email) | (db.func.lower(User.personal_email) == p_email)
+        ).first()
+        conflict_emp = Employee.query.filter(
+            Employee.user_id != target.id,
+            (db.func.lower(Employee.email) == p_email) | (db.func.lower(Employee.personal_email) == p_email)
+        ).first()
+        if conflict_user or conflict_emp:
+            return jsonify({"error": f"An account with email '{p_email}' has already been created."}), 409
+
     data = request.get_json(silent=True) or {}
 
     department_id = data.get("department_id") or ""
@@ -62,6 +82,7 @@ def approve_user(user_id):
     employee = Employee(
         full_name=full_name,
         email=company_email,
+        personal_email=p_email,
         phone=normalize_phone_number(data.get("phone") or target.phone or ""),
         user_id=target.id,
         department_id=department_id,

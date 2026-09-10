@@ -44,6 +44,8 @@ export default function Employees() {
   const [filterRole, setFilterRole] = useState("all");
   const [approvingUser, setApprovingUser] = useState(null);
   const [approveForm, setApproveForm] = useState(emptyApproveForm);
+  const [submitting, setSubmitting] = useState(false);
+  const [approving, setApproving] = useState(false);
   const [form, setForm] = useState({
     full_name: "", email: "", phone: "", department_id: "", position: "",
     role: "Staff Member", hire_date: "", status: "active", employee_id_code: "",
@@ -122,6 +124,8 @@ export default function Employees() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+
     if (editing && isAdminProfile(editing) && !isCurrentAdmin) {
       toast({
         title: "Access Denied",
@@ -130,6 +134,24 @@ export default function Employees() {
       });
       return;
     }
+
+    if (!editing) {
+      const normPersonal = form.personal_email?.trim().toLowerCase();
+      const normEmail = form.email?.trim().toLowerCase();
+      const duplicate = employees.find((emp) =>
+        (normPersonal && (emp.personal_email?.toLowerCase() === normPersonal || emp.email?.toLowerCase() === normPersonal)) ||
+        (normEmail && (emp.email?.toLowerCase() === normEmail || emp.personal_email?.toLowerCase() === normEmail))
+      );
+      if (duplicate) {
+        toast({
+          title: "Account Already Exists",
+          description: `An account with this email (${normPersonal || normEmail}) has already created an account for ${duplicate.full_name}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     const dept = departments.find((d) => d.id === form.department_id);
     const otherEmails = employees.filter((emp) => emp.id !== editing?.id).map((emp) => emp.email);
     const email = form.email?.trim() || generateUniqueEmail(generateEmployeeEmailBase(form.full_name), otherEmails);
@@ -140,6 +162,7 @@ export default function Employees() {
       department_name: dept?.name || "",
       employee_id_code: form.employee_id_code?.trim() || (editing?.employee_id_code || `EIC-${Date.now().toString().slice(-6)}`),
     };
+    setSubmitting(true);
     try {
       if (editing) {
         await Employee.update(editing.id, data);
@@ -160,6 +183,8 @@ export default function Employees() {
       loadData();
     } catch (e) {
       toast({ title: "Error", description: e?.response?.data?.error || e?.message || "Failed to save staff member", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -231,6 +256,8 @@ export default function Employees() {
 
   const handleApprove = async (e) => {
     e.preventDefault();
+    if (approving) return;
+    setApproving(true);
     try {
       const result = await approveUser(approvingUser.id, approveForm);
       await logAudit("Approved Account", "Employee", approvingUser.id, approveForm.full_name, performer, `Approved ${approvingUser.email} as ${approveForm.role}`);
@@ -244,7 +271,9 @@ export default function Employees() {
       setApprovingUser(null);
       loadData();
     } catch (e) {
-      toast({ title: "Error", description: "Failed to approve user", variant: "destructive" });
+      toast({ title: "Error", description: e?.response?.data?.error || e?.message || "Failed to approve user", variant: "destructive" });
+    } finally {
+      setApproving(false);
     }
   };
 
@@ -554,7 +583,7 @@ export default function Employees() {
               </div>
               <div className="flex gap-2 pt-2">
                 <Button type="button" variant="outline" className="flex-1" onClick={() => setShowForm(false)}>Cancel</Button>
-                <Button type="submit" className="flex-1 bg-slate-800 hover:bg-slate-900">{editing ? "Update" : "Add Staff"}</Button>
+                <Button type="submit" disabled={submitting} className="flex-1 bg-slate-800 hover:bg-slate-900">{submitting ? "Saving..." : editing ? "Update" : "Add Staff"}</Button>
               </div>
             </form>
           </div>
@@ -629,7 +658,7 @@ export default function Employees() {
               </div>
               <div className="flex gap-2 pt-2">
                 <Button type="button" variant="outline" className="flex-1" onClick={() => setApprovingUser(null)}>Cancel</Button>
-                <Button type="submit" className="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-900">Approve &amp; Create Staff Record</Button>
+                <Button type="submit" disabled={approving} className="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-900">{approving ? "Approving..." : "Approve & Create Staff Record"}</Button>
               </div>
             </form>
           </div>

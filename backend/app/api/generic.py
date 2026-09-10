@@ -101,6 +101,7 @@ def register_entity(
     delete="any",
     owner_field="created_by_id",
     list_filter=None,
+    before_create=None,
     before_delete=None,
     before_update=None,
     after_update=None,
@@ -149,6 +150,10 @@ def register_entity(
         missing = _missing_required_fields(model, obj)
         if missing:
             return jsonify({"error": f"Missing required field(s): {', '.join(missing)}"}), 400
+        if before_create:
+            err = before_create(obj, user, data)
+            if err:
+                return jsonify({"error": err}), 400
         db.session.add(obj)
         try:
             db.session.commit()
@@ -167,11 +172,16 @@ def register_entity(
         user = current_user()
         if not check_permission(update, user, obj, owner_field):
             return jsonify({"error": "forbidden"}), 403
-        if before_update:
-            err = before_update(obj, user)
-            if err:
-                return jsonify({"error": err}), 403
         data = request.get_json(silent=True) or {}
+        if before_update:
+            import inspect
+            sig = inspect.signature(before_update)
+            if len(sig.parameters) >= 3:
+                err = before_update(obj, user, data)
+            else:
+                err = before_update(obj, user)
+            if err:
+                return jsonify({"error": err}), 400
         _apply_fields(model, obj, data)
         missing = _missing_required_fields(model, obj)
         if missing:

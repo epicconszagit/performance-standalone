@@ -37,17 +37,37 @@ def onboard_employee():
     if not full_name:
         return jsonify({"error": "Full name is required"}), 400
 
-    # Auto-generate company email if not explicitly provided
-    if not company_email:
-        company_email = generate_unique_company_email(full_name)
-
     if personal_email:
         email_ok, email_err = validate_registration_email(personal_email)
         if not email_ok:
             return jsonify({"error": f"Invalid personal email: {email_err}"}), 400
 
-    if User.query.filter_by(email=company_email).first() or Employee.query.filter_by(email=company_email).first():
-        return jsonify({"error": f"An account with company email '{company_email}' already exists."}), 409
+        existing_user = User.query.filter(
+            (db.func.lower(User.email) == personal_email) | (db.func.lower(User.personal_email) == personal_email)
+        ).first()
+        existing_emp = Employee.query.filter(
+            (db.func.lower(Employee.email) == personal_email) | (db.func.lower(Employee.personal_email) == personal_email)
+        ).first()
+        if existing_user or existing_emp:
+            return jsonify({"error": f"An account with this email ('{personal_email}') has already been created."}), 409
+
+    if company_email:
+        existing_c_user = User.query.filter(
+            (db.func.lower(User.email) == company_email) | (db.func.lower(User.personal_email) == company_email)
+        ).first()
+        existing_c_emp = Employee.query.filter(
+            (db.func.lower(Employee.email) == company_email) | (db.func.lower(Employee.personal_email) == company_email)
+        ).first()
+        if existing_c_user or existing_c_emp:
+            return jsonify({"error": f"An account with company email '{company_email}' already exists."}), 409
+    else:
+        # Check if an employee with the exact full name already exists
+        existing_name = Employee.query.filter(db.func.lower(Employee.full_name) == full_name.lower()).first()
+        if existing_name:
+            return jsonify({
+                "error": f"A staff member with the name '{full_name}' already exists ({existing_name.email}). If this is a different individual, please specify an official company email explicitly."
+            }), 409
+        company_email = generate_unique_company_email(full_name)
 
     hire_date_raw = data.get("hire_date") or ""
     hire_date = date.fromisoformat(hire_date_raw) if hire_date_raw else None

@@ -48,6 +48,9 @@ def create_app(config_class=Config):
     from .api.email_route import email_bp
     app.register_blueprint(email_bp, url_prefix="/api")
 
+    from .api.meetings_batch import meetings_batch_bp
+    app.register_blueprint(meetings_batch_bp, url_prefix="/api")
+
     from .scheduler import init_scheduler
     init_scheduler(app)
 

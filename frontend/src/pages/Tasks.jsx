@@ -165,6 +165,24 @@ export default function Tasks() {
       toast({ title: "Error", description: "Please assign at least one staff member", variant: "destructive" });
       return;
     }
+    const todayDate = new Date().toISOString().split("T")[0];
+    if (form.expected_completion_date && form.expected_completion_date < todayDate) {
+      toast({
+        title: "Invalid Date",
+        description: "Expected completion date cannot be in the past. Please select today or a future date.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (form.deadline && new Date(form.deadline) < new Date()) {
+      toast({
+        title: "Invalid Deadline",
+        description: "Task deadline cannot be in the past. Please select a future date and time.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const assignedNames = finalAssigneeIds
       .map((id) => employees.find((emp) => emp.id === id)?.full_name)
       .filter(Boolean);
@@ -717,11 +735,21 @@ export default function Tasks() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Deadline</Label>
-                  <Input type="datetime-local" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
+                  <Input
+                    type="datetime-local"
+                    min={new Date().toISOString().slice(0, 16)}
+                    value={form.deadline}
+                    onChange={(e) => setForm({ ...form, deadline: e.target.value })}
+                  />
                 </div>
                 <div>
                   <Label>Expected Completion Date</Label>
-                  <Input type="date" value={form.expected_completion_date} onChange={(e) => setForm({ ...form, expected_completion_date: e.target.value })} />
+                  <Input
+                    type="date"
+                    min={new Date().toISOString().split("T")[0]}
+                    value={form.expected_completion_date}
+                    onChange={(e) => setForm({ ...form, expected_completion_date: e.target.value })}
+                  />
                 </div>
               </div>
               <div>

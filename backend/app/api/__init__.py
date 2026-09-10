@@ -121,6 +121,32 @@ def build_entities_blueprint():
             elif emp.status == "active":
                 u.status = "active"
 
+    def before_create_employee(emp, user, data):
+        email = (getattr(emp, "email", None) or "").strip().lower()
+        personal_email = (getattr(emp, "personal_email", None) or "").strip().lower()
+
+        if email:
+            existing_user = User.query.filter(
+                (db.func.lower(User.email) == email) | (db.func.lower(User.personal_email) == email)
+            ).first()
+            existing_emp = Employee.query.filter(
+                (db.func.lower(Employee.email) == email) | (db.func.lower(Employee.personal_email) == email)
+            ).first()
+            if existing_user or existing_emp:
+                return f"An account with this email ('{email}') has already been created."
+
+        if personal_email:
+            existing_user = User.query.filter(
+                (db.func.lower(User.email) == personal_email) | (db.func.lower(User.personal_email) == personal_email)
+            ).first()
+            existing_emp = Employee.query.filter(
+                (db.func.lower(Employee.email) == personal_email) | (db.func.lower(Employee.personal_email) == personal_email)
+            ).first()
+            if existing_user or existing_emp:
+                return f"An account with this email ('{personal_email}') has already been created."
+
+        return None
+
     register_entity(
         bp,
         Employee,
@@ -128,11 +154,48 @@ def build_entities_blueprint():
         create="admin",
         update="admin",
         delete="admin",
+        before_create=before_create_employee,
         before_delete=on_delete_employee,
         before_update=before_update_employee,
         after_update=on_update_employee,
     )
-    register_entity(bp, Meeting, "meetings", create="any", update="owner_or_admin", delete="owner_or_admin")
+    def validate_meeting_date(meeting, user, data=None):
+        from datetime import date as dt_date, datetime
+        raw_date = None
+        if data and "date" in data:
+            raw_date = data.get("date")
+        elif hasattr(meeting, "date") and meeting.date:
+            raw_date = meeting.date
+
+        if not raw_date:
+            return "Meeting date is required."
+
+        target_date = None
+        if isinstance(raw_date, str):
+            try:
+                target_date = datetime.strptime(raw_date.strip().split("T")[0], "%Y-%m-%d").date()
+            except Exception:
+                return "Invalid date format for meeting. Expected YYYY-MM-DD."
+        elif hasattr(raw_date, "date"):
+            target_date = raw_date.date()
+        elif isinstance(raw_date, dt_date):
+            target_date = raw_date
+
+        if target_date and target_date < dt_date.today():
+            return f"Cannot schedule or move a meeting to a past date ({target_date}). Meeting dates must start from the current date going forward."
+
+        return None
+
+    register_entity(
+        bp,
+        Meeting,
+        "meetings",
+        create="any",
+        update="owner_or_admin",
+        delete="owner_or_admin",
+        before_create=validate_meeting_date,
+        before_update=validate_meeting_date,
+    )
     register_entity(
         bp, MeetingMinutes, "meeting-minutes", create="any", update="owner_or_admin", delete="owner_or_admin"
     )
@@ -316,6 +379,28 @@ def build_entities_blueprint():
         delete="owner_or_admin",
         list_filter=filter_reports_confidentiality,
     )
-    register_entity(bp, Task, "tasks", create="any", update="any", delete="owner_or_admin")
+
+    def validate_task_date(task, user, data=None):
+        from datetime import date as dt_date, datetime
+        raw_exp = (data.get("expected_completion_date") if data else None) or getattr(task, "expected_completion_date", None)
+        if raw_exp:
+            try:
+                exp_date = datetime.strptime(str(raw_exp).strip().split("T")[0], "%Y-%m-%d").date()
+                if exp_date < dt_date.today():
+                    return "Task expected completion date cannot be in the past."
+            except Exception:
+                pass
+        return None
+
+    register_entity(
+        bp,
+        Task,
+        "tasks",
+        create="any",
+        update="any",
+        delete="owner_or_admin",
+        before_create=validate_task_date,
+        before_update=validate_task_date,
+    )
 
     return bp
