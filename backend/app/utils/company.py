@@ -1,7 +1,8 @@
+import os
 import re
 import uuid
 
-EMAIL_DOMAIN = "epicnetworkgroup.com"
+EMAIL_DOMAIN = os.environ.get("EMAIL_DOMAIN") or "epicnetworkgroup.co"
 
 
 def _slugify_local_part(text):

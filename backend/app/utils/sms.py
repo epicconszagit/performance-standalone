@@ -80,7 +80,7 @@ def send_sms(to, message):
 
     if _client is None:
         logger.info("STUB SMS -> to=%s\n%s", to, message)
-        return True
+        return False
 
     try:
         _client.messages.create(to=to, from_=TWILIO_FROM_NUMBER, body=message)

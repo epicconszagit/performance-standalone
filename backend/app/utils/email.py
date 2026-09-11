@@ -6,20 +6,50 @@ import urllib.error
 import urllib.request
 from email.mime.text import MIMEText
 
+try:
+    from dotenv import load_dotenv
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    load_dotenv(os.path.join(base_dir, ".env"))
+except Exception:
+    pass
+
 logger = logging.getLogger("email")
 logging.basicConfig(level=logging.INFO)
 
 
-def send_email(to, subject, body):
+def send_email(to, subject, body, category="general"):
     """Sends real email via Resend HTTPS API (Port 443) or SMTP fallback.
     Resend operates over HTTPS port 443 which is never blocked by cloud providers.
+    Supports dedicated Onboarding API key / sender or General Performance key.
     """
     if not to:
         return False
 
-    resend_key = os.environ.get("RESEND_API_KEY")
+    # Ensure environment variables are fresh from .env
+    try:
+        from dotenv import load_dotenv
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        load_dotenv(os.path.join(base_dir, ".env"), override=True)
+    except Exception:
+        pass
+
+    sub_lower = (subject or "").lower()
+    is_onboarding = (
+        category == "onboarding"
+        or "onboard" in sub_lower
+        or "account has been created" in sub_lower
+        or "account has been approved" in sub_lower
+        or "welcome" in sub_lower
+    )
+
+    if is_onboarding and os.environ.get("RESEND_ONBOARDING_API_KEY"):
+        resend_key = os.environ.get("RESEND_ONBOARDING_API_KEY")
+        sender = os.environ.get("RESEND_ONBOARDING_FROM") or "EPIC Onboarding <onboarding@epicnetworkgroup.co>"
+    else:
+        resend_key = os.environ.get("RESEND_API_KEY") or os.environ.get("RESEND_ONBOARDING_API_KEY")
+        sender = os.environ.get("RESEND_FROM") or "EPIC Performance <notifications@epicnetworkgroup.co>"
+
     if resend_key:
-        sender = os.environ.get("RESEND_FROM") or "EPIC Performance <onboarding@resend.dev>"
         payload = json.dumps({
             "from": sender,
             "to": [to],

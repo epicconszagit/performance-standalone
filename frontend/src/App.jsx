@@ -24,7 +24,8 @@ import Reports from './pages/Reports';
 import MeetingMinutes from './pages/MeetingMinutes';
 import PendingApproval from './pages/PendingApproval';
 import Profile from './pages/Profile';
-// Add page imports here
+import TodoList from './pages/TodoList';
+
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, authError, navigateToLogin, isAuthenticated, user } = useAuth();
@@ -59,6 +60,7 @@ const AuthenticatedApp = () => {
           <Route path="/departments" element={<Navigate to="/settings?tab=departments" replace />} />
           <Route path="/employees" element={<Navigate to="/settings?tab=staff" replace />} />
           <Route path="/tasks" element={<Tasks />} />
+          <Route path="/todos" element={<TodoList />} />
           <Route path="/meetings" element={<Meetings />} />
           <Route path="/announcements" element={<Announcements />} />
           <Route path="/performance" element={<Performance />} />

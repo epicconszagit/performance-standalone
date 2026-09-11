@@ -137,6 +137,8 @@ class Task(BaseModel):
     approved_date = db.Column(db.DateTime)
     rejection_reason = db.Column(db.Text)
     created_by_id = db.Column(db.String(36))
+    priority = db.Column(db.String(20), default="Medium")
+    weight = db.Column(db.Integer, default=2)
 
 
 class Meeting(BaseModel):
@@ -287,3 +289,19 @@ class CompanyBranding(BaseModel):
     website = db.Column(db.String(255))
     updated_by_id = db.Column(db.String(36))
     updated_by_name = db.Column(db.String(255))
+
+
+class TodoItem(BaseModel):
+    __tablename__ = "todo_items"
+
+    employee_id = db.Column(db.String(36), nullable=False)
+    employee_name = db.Column(db.String(255))
+    department_id = db.Column(db.String(36))
+    title = db.Column(db.String(500), nullable=False)
+    description = db.Column(db.Text)
+    priority = db.Column(db.String(20), default="Medium")
+    due_date = db.Column(db.DateTime)
+    completed = db.Column(db.Boolean, default=False)
+    completed_date = db.Column(db.DateTime)
+    created_by_id = db.Column(db.String(36))
+

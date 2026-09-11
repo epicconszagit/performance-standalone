@@ -3,7 +3,7 @@ import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, CheckSquare, CalendarDays,
   Megaphone, TrendingUp, BarChart3, Bell, FileText, Settings as SettingsIcon,
-  LogOut, Menu, X, Shield, ClipboardList
+  LogOut, Menu, X, Shield, ClipboardList, ListTodo
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Notification as NotificationEntity, Task } from "@/api/entities";
@@ -35,6 +35,7 @@ const SETTINGS_ROLES = ["Super Administrator", "Administrator", "Director of Ope
 const NAV_ITEMS = [
   { label: "Dashboard", path: "/", icon: LayoutDashboard, roles: ALL_ROLES },
   { label: "Tasks", path: "/tasks", icon: CheckSquare, roles: ALL_ROLES },
+  { label: "To-Do List", path: "/todos", icon: ListTodo, roles: ALL_ROLES },
   { label: "Meetings", path: "/meetings", icon: CalendarDays, roles: ALL_ROLES },
   { label: "Meeting Minutes", path: "/minutes", icon: ClipboardList, roles: ALL_ROLES },
   { label: "Announcements", path: "/announcements", icon: Megaphone, roles: ALL_ROLES },

@@ -29,3 +29,4 @@ export const Notification = makeEntity("notifications");
 export const PerformanceReport = makeEntity("performance-reports");
 export const Report = makeEntity("reports");
 export const Task = makeEntity("tasks");
+export const TodoItem = makeEntity("todo-items");

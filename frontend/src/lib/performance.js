@@ -14,27 +14,57 @@ export function getEffectiveStatus(task) {
   return task.status;
 }
 
+export const PRIORITY_WEIGHTS = {
+  "Low": 1,
+  "Medium": 2,
+  "High": 3,
+  "Urgent": 5,
+};
+
+export function getTaskWeight(task) {
+  if (task?.weight && !isNaN(Number(task.weight))) {
+    return Number(task.weight);
+  }
+  return PRIORITY_WEIGHTS[task?.priority] || 2;
+}
+
 export function calculatePerformance(tasks) {
-  const assigned = tasks.length;
-  const completed = tasks.filter((t) => t.status === "Completed").length;
-  const onTime = tasks.filter((t) => t.completed_on_time === true).length;
-  const late = tasks.filter(
-    (t) => t.status === "Completed" && t.completed_on_time === false
-  ).length;
-  const pending = tasks.filter(
+  const validTasks = (tasks || []).filter((t) => !t.deleted);
+  const assigned = validTasks.length;
+  const assignedWeight = validTasks.reduce((sum, t) => sum + getTaskWeight(t), 0);
+
+  const completedTasks = validTasks.filter((t) => t.status === "Completed");
+  const completed = completedTasks.length;
+  const completedWeight = completedTasks.reduce((sum, t) => sum + getTaskWeight(t), 0);
+
+  const onTimeTasks = completedTasks.filter((t) => t.completed_on_time === true);
+  const onTime = onTimeTasks.length;
+  const onTimeWeight = onTimeTasks.reduce((sum, t) => sum + getTaskWeight(t), 0);
+
+  const lateTasks = completedTasks.filter((t) => t.completed_on_time === false);
+  const late = lateTasks.length;
+  const lateWeight = lateTasks.reduce((sum, t) => sum + getTaskWeight(t), 0);
+
+  const pendingTasks = validTasks.filter(
     (t) => t.status === "Pending" || t.status === "In Progress" || t.status === "Submitted"
-  ).length;
-  const overdue = tasks.filter((t) => isOverdue(t)).length;
-  const archived = tasks.filter((t) => t.status === "Archived" || t.archived).length;
+  );
+  const pending = pendingTasks.length;
 
-  const productivity = assigned > 0 ? Math.round((completed / assigned) * 100) : 0;
-  const onTimeRate = completed > 0 ? Math.round((onTime / completed) * 100) : 0;
+  const overdueTasks = validTasks.filter((t) => isOverdue(t));
+  const overdue = overdueTasks.length;
+  const overdueWeight = overdueTasks.reduce((sum, t) => sum + getTaskWeight(t), 0);
 
-  // Score: 50% completion + 30% on-time rate + 20% productivity
-  const completionScore = assigned > 0 ? (completed / assigned) * 50 : 0;
-  const onTimeScore = completed > 0 ? (onTime / completed) * 30 : 0;
+  const archived = validTasks.filter((t) => t.status === "Archived" || t.archived).length;
+
+  const productivity = assignedWeight > 0 ? Math.round((completedWeight / assignedWeight) * 100) : 0;
+  const onTimeRate = completedWeight > 0 ? Math.round((onTimeWeight / completedWeight) * 100) : 0;
+
+  // Weighted Score Formula:
+  // 50% weighted completion + 30% weighted on-time rate + 20% productivity
+  const completionScore = assignedWeight > 0 ? (completedWeight / assignedWeight) * 50 : 0;
+  const onTimeScore = completedWeight > 0 ? (onTimeWeight / completedWeight) * 30 : 0;
   const productivityScore = Math.min(productivity, 100) * 0.2;
-  const score = Math.round(completionScore + onTimeScore + productivityScore);
+  const score = Math.max(0, Math.min(100, Math.round(completionScore + onTimeScore + productivityScore)));
 
   const classification =
     score >= 90 ? "Outstanding" :
@@ -44,14 +74,22 @@ export function calculatePerformance(tasks) {
 
   return {
     assigned,
+    assignedWeight,
     completed,
+    completedWeight,
     onTime,
+    onTimeWeight,
     late,
+    lateWeight,
     pending,
     overdue,
+    overdueWeight,
     archived,
     productivity,
     onTimeRate,
+    completionScore: Math.round(completionScore * 10) / 10,
+    onTimeScore: Math.round(onTimeScore * 10) / 10,
+    productivityScore: Math.round(productivityScore * 10) / 10,
     score,
     classification,
   };

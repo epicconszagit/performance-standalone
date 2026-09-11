@@ -113,15 +113,22 @@ def approve_user(user_id):
 
     try:
         if target.personal_email:
-            email_sent = send_email(to=target.personal_email, subject="Your EPIC TASK PERFORMANCE TRACKING SYSTEM account has been approved", body=notify_message)
-    except Exception:
-        pass
+            email_sent = send_email(
+                to=target.personal_email,
+                subject="Your EPIC TASK PERFORMANCE TRACKING SYSTEM account has been approved",
+                body=notify_message,
+                category="onboarding",
+            )
+    except Exception as e:
+        import logging
+        logging.getLogger("email").exception("Failed to send approval email to %s: %s", target.personal_email, e)
 
     try:
         if employee.phone:
             sms_sent = send_sms(to=employee.phone, message=notify_message)
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger("sms").exception("Failed to send approval SMS to %s: %s", employee.phone, e)
 
     return jsonify({
         "user": target.to_public_dict(),

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useSearchParams, Link } from "react-router-dom";
 import {
   CheckSquare, Plus, Pencil, Trash2, X, Search, Archive, Clock,
   AlertTriangle, CheckCircle2, ArchiveRestore, LayoutGrid, List,
-  Eye, FileText, Send, Check, XCircle, Paperclip
+  Eye, FileText, Send, Check, XCircle, Paperclip, ListTodo
 } from "lucide-react";
 import { Task, Employee, Department } from "@/api/entities";
 import { SendEmail, UploadFile } from "@/api/integrations";
@@ -13,8 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { StatusBadge } from "@/components/Badges";
-import { isOverdue, getEffectiveStatus, formatDate, formatDateTime, logAudit, createNotification } from "@/lib/performance";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { StatusBadge, PriorityBadge } from "@/components/Badges";
+import { isOverdue, getEffectiveStatus, formatDate, formatDateTime, logAudit, createNotification, PRIORITY_WEIGHTS } from "@/lib/performance";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -46,8 +47,10 @@ export default function Tasks() {
   const [reportTask, setReportTask] = useState(null);
   const [reportViewTask, setReportViewTask] = useState(null);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [form, setForm] = useState({
     title: "", description: "", assigned_to_ids: [],
+    priority: "Medium", weight: 2,
     deadline: "", expected_completion_date: "",
     attachment_file_url: "", attachment_file_name: "",
   });
@@ -56,8 +59,26 @@ export default function Tasks() {
   const isSecretary = role === "Secretary";
   const canAssignToAnyone = ["Super Administrator", "Administrator", "Director of Operations", "Department Manager"].includes(role);
 
+  const isAdministrator = (emp) => {
+    if (!emp) return false;
+    const r = emp.role || "";
+    const name = emp.full_name || "";
+    return (
+      ["Super Administrator", "Administrator"].includes(r) ||
+      r.toLowerCase().includes("admin") ||
+      name.toLowerCase() === "super administrator" ||
+      name.toLowerCase() === "administrator"
+    );
+  };
+
   const isAssignee = (task) => !!(employee && (task.assigned_to_ids || []).includes(employee.id));
-  const isAssigner = (task) => !!((employee && task.assigned_by_id === employee.id) || isAdmin || isSecretary);
+  const isAssigner = (task) => {
+    // An assignee can NEVER approve their own task
+    if (isAssignee(task)) return false;
+    if (employee && (task.assigned_by_id === employee.id || task.assigned_by_id === performer.id)) return true;
+    if (isAdmin) return true;
+    return false;
+  };
 
   const loadData = async () => {
     try {
@@ -89,6 +110,32 @@ export default function Tasks() {
 
   useEffect(() => { loadData(); }, [employee]);
 
+  // Handle prefilling if redirected from To-Do list ("Convert to Official Task")
+  useEffect(() => {
+    const convertTitle = searchParams.get("convert_title");
+    const convertDesc = searchParams.get("convert_desc");
+    const assignTo = searchParams.get("assign_to");
+    const prio = searchParams.get("priority");
+    if (convertTitle) {
+      const weights = { Low: 1, Medium: 2, High: 3, Urgent: 5 };
+      let initialAssignees = [];
+      if (assignTo && assignTo !== employee?.id) {
+        const targetEmp = employees.find((e) => e.id === assignTo);
+        if (targetEmp && !isAdministrator(targetEmp)) {
+          initialAssignees = [assignTo];
+        }
+      }
+      openCreate({
+        title: convertTitle,
+        description: convertDesc || "",
+        assigned_to_ids: initialAssignees,
+        priority: prio || "Medium",
+        weight: weights[prio] || 2,
+      });
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams]);
+
   const markTasksSeen = async (myTasks, emps) => {
     if (!employee) return;
     const unseen = myTasks.filter((t) =>
@@ -113,13 +160,18 @@ export default function Tasks() {
     }
   };
 
-  const openCreate = () => {
+  const openCreate = (prefill = {}) => {
     setEditing(null);
     setForm({
-      title: "", description: "",
-      assigned_to_ids: (!canAssignToAnyone && employee) ? [employee.id] : [],
-      deadline: "", expected_completion_date: "",
-      attachment_file_url: "", attachment_file_name: "",
+      title: prefill.title || "",
+      description: prefill.description || "",
+      assigned_to_ids: prefill.assigned_to_ids || [],
+      priority: prefill.priority || "Medium",
+      weight: prefill.weight || 2,
+      deadline: prefill.deadline || "",
+      expected_completion_date: prefill.expected_completion_date || "",
+      attachment_file_url: prefill.attachment_file_url || "",
+      attachment_file_name: prefill.attachment_file_name || "",
     });
     setShowForm(true);
   };
@@ -127,10 +179,15 @@ export default function Tasks() {
   const openEdit = (task) => {
     setEditing(task);
     setForm({
-      title: task.title || "", description: task.description || "",
+      title: task.title || "",
+      description: task.description || "",
       assigned_to_ids: task.assigned_to_ids || [],
-      deadline: task.deadline ? task.deadline.slice(0, 16) : "", expected_completion_date: task.expected_completion_date || "",
-      attachment_file_url: task.attachment_file_url || "", attachment_file_name: task.attachment_file_name || "",
+      priority: task.priority || "Medium",
+      weight: task.weight || (task.priority === "Urgent" ? 5 : task.priority === "High" ? 3 : task.priority === "Low" ? 1 : 2),
+      deadline: task.deadline ? task.deadline.slice(0, 16) : "",
+      expected_completion_date: task.expected_completion_date || "",
+      attachment_file_url: task.attachment_file_url || "",
+      attachment_file_name: task.attachment_file_name || "",
     });
     setShowForm(true);
   };
@@ -160,9 +217,25 @@ export default function Tasks() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const finalAssigneeIds = (!canAssignToAnyone && employee) ? [employee.id] : form.assigned_to_ids;
+    const finalAssigneeIds = form.assigned_to_ids || [];
     if (finalAssigneeIds.length === 0) {
       toast({ title: "Error", description: "Please assign at least one staff member", variant: "destructive" });
+      return;
+    }
+    if (employee && finalAssigneeIds.includes(employee.id)) {
+      toast({
+        title: "Self-Assignment Blocked",
+        description: "Staff members cannot assign official performance tasks to themselves. Use the To-Do list for personal tasks.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (finalAssigneeIds.some((id) => isAdministrator(employees.find((e) => e.id === id)))) {
+      toast({
+        title: "Assignment Blocked",
+        description: "Tasks cannot be assigned to Administrators. Administrators oversee operations rather than receiving performance task assignments.",
+        variant: "destructive",
+      });
       return;
     }
     const todayDate = new Date().toISOString().split("T")[0];
@@ -193,6 +266,8 @@ export default function Tasks() {
       assigned_to_names: assignedNames,
       assigned_by_id: performer.id,
       assigned_by_name: performer.name,
+      priority: form.priority || "Medium",
+      weight: form.weight || (form.priority === "Urgent" ? 5 : form.priority === "High" ? 3 : form.priority === "Low" ? 1 : 2),
       deadline: form.deadline,
       expected_completion_date: form.expected_completion_date,
       attachment_file_url: form.attachment_file_url,
@@ -218,7 +293,7 @@ export default function Tasks() {
       setShowForm(false);
       loadData();
     } catch (e) {
-      toast({ title: "Error", description: "Failed to save task", variant: "destructive" });
+      toast({ title: "Error", description: e?.message || "Failed to save task", variant: "destructive" });
     }
   };
 
@@ -586,6 +661,10 @@ export default function Tasks() {
                           {task.description && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{task.description}</p>}
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
+                          <PriorityBadge priority={task.priority || "Medium"} />
+                          <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded" title="Performance weight points">
+                            {task.weight || (task.priority === "Urgent" ? 5 : task.priority === "High" ? 3 : task.priority === "Low" ? 1 : 2)} pts
+                          </span>
                           <StatusBadge status={effStatus} />
                         </div>
                       </div>
@@ -710,27 +789,58 @@ export default function Tasks() {
                 <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} />
               </div>
               <div>
-                <Label>Assign To *</Label>
-                {canAssignToAnyone ? (
-                  <>
-                    <div className="border border-slate-200 rounded-lg p-3 max-h-40 overflow-y-auto space-y-1.5">
-                      {employees.filter((e) => e.status === "active").map((emp) => (
-                        <label key={emp.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded">
-                          <input type="checkbox" checked={form.assigned_to_ids.includes(emp.id)} onChange={() => toggleAssignee(emp.id)} className="rounded" />
-                          <span className="text-sm text-slate-700">{emp.full_name}</span>
-                          <span className="text-xs text-slate-400">{emp.department_name || emp.role}</span>
-                        </label>
-                      ))}
-                    </div>
-                    {form.assigned_to_ids.length > 0 && (
-                      <p className="text-xs text-slate-500 mt-1">{form.assigned_to_ids.length} selected</p>
-                    )}
-                  </>
-                ) : (
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-600">
-                    This task will be assigned to <span className="font-semibold text-slate-800">{employee?.full_name || "you"}</span>.
-                  </div>
+                <Label className="mb-1 block">Assign To *</Label>
+                <div className="border border-slate-200 rounded-lg p-3 max-h-40 overflow-y-auto space-y-1.5">
+                  {employees.filter((e) => e.status === "active" && e.id !== employee?.id && !isAdministrator(e)).map((emp) => (
+                    <label key={emp.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded">
+                      <input type="checkbox" checked={form.assigned_to_ids.includes(emp.id)} onChange={() => toggleAssignee(emp.id)} className="rounded" />
+                      <span className="text-sm text-slate-700">{emp.full_name}</span>
+                      <span className="text-xs text-slate-400">{emp.department_name || emp.role}</span>
+                    </label>
+                  ))}
+                  {employees.filter((e) => e.status === "active" && e.id !== employee?.id && !isAdministrator(e)).length === 0 && (
+                    <p className="text-xs text-slate-400 p-2 text-center">No assignable staff members available</p>
+                  )}
+                </div>
+                {form.assigned_to_ids.length > 0 && (
+                  <p className="text-xs text-slate-500 mt-1">{form.assigned_to_ids.length} staff member(s) selected</p>
                 )}
+              </div>
+
+              {/* Priority and Weight Selection */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Priority & Impact *</Label>
+                  <Select
+                    value={form.priority}
+                    onValueChange={(val) => {
+                      const weights = { Low: 1, Medium: 2, High: 3, Urgent: 5 };
+                      setForm({ ...form, priority: val, weight: weights[val] || 2 });
+                    }}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select priority" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Low">Low (Routine - 1 pt)</SelectItem>
+                      <SelectItem value="Medium">Medium (Standard - 2 pts)</SelectItem>
+                      <SelectItem value="High">High (Major - 3 pts)</SelectItem>
+                      <SelectItem value="Urgent">Urgent (Critical - 5 pts)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Performance Weight (pts)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={form.weight}
+                    onChange={(e) => setForm({ ...form, weight: parseInt(e.target.value) || 1 })}
+                    className="mt-1"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-0.5">Determines score contribution</p>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

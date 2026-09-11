@@ -117,7 +117,16 @@ def onboard_employee():
         f"• Employee ID: {employee.employee_id_code}\n\n"
         f"Please log in and update your password upon first sign-in."
     )
-    email_sent = send_email(to=recipient, subject="Your EPIC TASK PERFORMANCE TRACKING SYSTEM account has been created", body=message) if recipient else False
+    email_sent = (
+        send_email(
+            to=recipient,
+            subject="Your EPIC TASK PERFORMANCE TRACKING SYSTEM account has been created",
+            body=message,
+            category="onboarding",
+        )
+        if recipient
+        else False
+    )
     sms_sent = send_sms(to=phone, message=f"Hi {full_name}, your EPIC account is ready. Login: {company_email}, Temp Password: {temp_password}, ID: {employee.employee_id_code}") if phone else False
 
     return jsonify({

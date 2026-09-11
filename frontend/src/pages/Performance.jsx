@@ -269,12 +269,12 @@ export default function Performance() {
             <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
               {[
                 { label: "Tasks Assigned", value: perf.assigned, color: "text-slate-900" },
-                { label: "Completed", value: perf.completed, color: "text-emerald-600" },
+                { label: "Workload Weight", value: `${perf.assignedWeight || 0} pts`, color: "text-slate-700" },
+                { label: "Completed", value: `${perf.completed} (${perf.completedWeight || 0} pts)`, color: "text-emerald-600" },
                 { label: "On Time", value: perf.onTime, color: "text-blue-600" },
                 { label: "Completed Late", value: perf.late, color: "text-orange-600" },
                 { label: "Pending", value: perf.pending, color: "text-slate-600" },
                 { label: "Overdue", value: perf.overdue, color: "text-red-500" },
-                { label: "Archived", value: perf.archived, color: "text-zinc-500" },
                 { label: "Productivity", value: `${perf.productivity}%`, color: "text-amber-600" },
                 { label: "On-Time Rate", value: `${perf.onTimeRate}%`, color: "text-emerald-600" },
               ].map((m) => (
@@ -283,6 +283,62 @@ export default function Performance() {
                   <p className="text-xs text-slate-400 mt-0.5">{m.label}</p>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Weighted Formula Breakdown */}
+          <div className="mt-6 pt-6 border-t border-slate-100 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Weighted Performance Formula Breakdown</h3>
+                <p className="text-xs text-slate-500">
+                  Tasks contribute to performance based on complexity weight: Low (1 pt), Medium (2 pts), High (3 pts), Urgent (5 pts).
+                </p>
+              </div>
+              <div className="text-xs text-slate-600 bg-slate-100 px-3 py-1 rounded-lg">
+                Total Workload: <strong className="text-slate-900">{perf.assignedWeight || 0} pts</strong> ({perf.completedWeight || 0} pts completed)
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="font-semibold text-slate-700">1. Weighted Completion (50%)</span>
+                  <span className="font-bold text-emerald-600">{perf.completionScore || 0} / 50 pts</span>
+                </div>
+                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(100, ((perf.completionScore || 0) / 50) * 100)}%` }} />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1.5">
+                  Ratio of completed task weights vs total assigned weights.
+                </p>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="font-semibold text-slate-700">2. Weighted Timeliness (30%)</span>
+                  <span className="font-bold text-blue-600">{perf.onTimeScore || 0} / 30 pts</span>
+                </div>
+                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(100, ((perf.onTimeScore || 0) / 30) * 100)}%` }} />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1.5">
+                  On-time completion rate across high and standard impact tasks.
+                </p>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="font-semibold text-slate-700">3. Productivity & Quality (20%)</span>
+                  <span className="font-bold text-amber-600">{perf.productivityScore || 0} / 20 pts</span>
+                </div>
+                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-amber-500 rounded-full" style={{ width: `${Math.min(100, ((perf.productivityScore || 0) / 20) * 100)}%` }} />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1.5">
+                  Overall output efficiency and quality execution rate.
+                </p>
+              </div>
             </div>
           </div>
         </div>

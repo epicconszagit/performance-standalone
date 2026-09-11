@@ -2,6 +2,7 @@ import React from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { Clock, Pencil, Trash2, Archive, ArchiveRestore } from "lucide-react";
 import { isOverdue, formatDateTime } from "@/lib/performance";
+import { PriorityBadge } from "@/components/Badges";
 import { cn } from "@/lib/utils";
 
 const COLUMNS = [
@@ -57,7 +58,10 @@ export default function KanbanBoard({ tasks, onMoveTask, onEditTask, onArchiveTa
                                 !canEdit && "opacity-80 cursor-default"
                               )}
                             >
-                              <h4 className="text-sm font-semibold text-slate-900 leading-snug">{task.title}</h4>
+                              <div className="flex items-start justify-between gap-1 mb-1">
+                                <h4 className="text-sm font-semibold text-slate-900 leading-snug">{task.title}</h4>
+                                <PriorityBadge priority={task.priority || "Medium"} />
+                              </div>
                               {task.description && (
                                 <p className="text-xs text-slate-500 mt-1 line-clamp-2">{task.description}</p>
                               )}
