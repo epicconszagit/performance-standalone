@@ -131,12 +131,17 @@ def register_entity(
         if limit:
             query = query.limit(limit)
 
-        all_objs = query.all()
-        if list_filter:
-            user = current_user()
-            all_objs = list_filter(all_objs, user)
+        try:
+            all_objs = query.all()
+            if list_filter:
+                user = current_user()
+                all_objs = list_filter(all_objs, user)
 
-        return jsonify([obj.to_dict() for obj in all_objs])
+            return jsonify([obj.to_dict() for obj in all_objs])
+        except Exception as e:
+            import logging
+            logging.getLogger("api").exception("Failed to query %s: %s", getattr(model, "__name__", "Model"), e)
+            return jsonify({"error": f"Failed to retrieve {getattr(model, '__name__', 'records')}: {str(e)}"}), 500
 
     def create_entity():
         user = current_user()

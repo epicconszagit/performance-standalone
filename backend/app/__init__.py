@@ -24,6 +24,25 @@ def create_app(config_class=Config):
 
     from . import models  # noqa: F401  (registers models with SQLAlchemy)
 
+    # Self-healing database check: ensure new columns and tables exist automatically
+    with app.app_context():
+        try:
+            from sqlalchemy import inspect, text
+            inspector = inspect(db.engine)
+            tables = inspector.get_table_names()
+            if "tasks" in tables:
+                task_cols = [c["name"] for c in inspector.get_columns("tasks")]
+                if "priority" not in task_cols:
+                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN priority VARCHAR(20) DEFAULT 'Medium'"))
+                if "weight" not in task_cols:
+                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN weight INTEGER DEFAULT 2"))
+                db.session.commit()
+            if "todo_items" not in tables:
+                from .models import TodoItem
+                TodoItem.__table__.create(db.engine, checkfirst=True)
+        except Exception as e:
+            app.logger.warning("Database self-healing notice: %s", e)
+
     from .auth.routes import auth_bp
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
 
