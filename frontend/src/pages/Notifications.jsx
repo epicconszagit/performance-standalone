@@ -90,16 +90,6 @@ export default function Notifications() {
     if (user && n.user_id === user.id) return true;
     if (employee && (n.employee_id === employee.id || n.user_id === employee.id)) return true;
     if (user && n.employee_id === user.id) return true;
-
-    const msg = (n.message || "").toLowerCase();
-    const title = (n.title || "").toLowerCase();
-    if (msg.includes("you have been assigned") || msg.includes("for your approval")) {
-      return true;
-    }
-    const myName = (employee?.full_name || user?.full_name || "").toLowerCase().trim();
-    if (myName && (msg.includes(myName) || title.includes(myName))) {
-      return true;
-    }
     return false;
   };
 
