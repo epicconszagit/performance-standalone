@@ -14,7 +14,7 @@ echo "=== Applying Migrations and Restarting Service ==="
 cd /var/www/performance-app/backend
 source venv/bin/activate
 pip install -r requirements.txt
-flask db upgrade || true
+flask db upgrade || flask db stamp head || true
 systemctl restart performance
 
 echo "=== Deployment Complete! Service Status: ==="

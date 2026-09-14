@@ -3,7 +3,8 @@ import { useOutletContext, useSearchParams, Link } from "react-router-dom";
 import {
   CheckSquare, Plus, Pencil, Trash2, X, Search, Archive, Clock,
   AlertTriangle, CheckCircle2, ArchiveRestore, LayoutGrid, List,
-  Eye, FileText, Send, Check, XCircle, Paperclip, ListTodo
+  Eye, FileText, Send, Check, XCircle, Paperclip, ListTodo,
+  PlayCircle, AlertCircle
 } from "lucide-react";
 import { Task, Employee, Department } from "@/api/entities";
 import { SendEmail, UploadFile } from "@/api/integrations";
