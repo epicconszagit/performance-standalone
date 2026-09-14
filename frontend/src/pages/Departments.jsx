@@ -126,6 +126,8 @@ export default function Departments() {
   // Helper to check if employee belongs to dept
   const isEmployeeInDept = (emp, deptId) => {
     if (!emp || !deptId) return false;
+    const dept = departments.find((d) => d.id === deptId);
+    if (dept && dept.manager_id && dept.manager_id === emp.id) return true;
     if (emp.department_id === deptId) return true;
     const deptIds = Array.isArray(emp.department_ids) ? emp.department_ids : [];
     return deptIds.includes(deptId);

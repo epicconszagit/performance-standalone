@@ -54,8 +54,15 @@ export default function DirectorDashboard() {
   const needsAttention = [...allPerfs].filter((p) => p.perf.score < 60 && p.perf.assigned > 0).sort((a, b) => a.perf.score - b.perf.score);
 
   const deptPerfs = departments.map((dept) => {
-    const deptEmps = activeEmployees.filter((e) => e.department_id === dept.id);
-    const deptTasks = tasks.filter((t) => deptEmps.some((e) => (t.assigned_to_ids || []).includes(e.id)));
+    const deptEmps = activeEmployees.filter((e) =>
+      e.department_id === dept.id ||
+      (Array.isArray(e.department_ids) && e.department_ids.includes(dept.id)) ||
+      (dept.manager_id && dept.manager_id === e.id)
+    );
+    const deptTasks = tasks.filter((t) =>
+      t.department_id === dept.id ||
+      deptEmps.some((e) => (t.assigned_to_ids || []).includes(e.id))
+    );
     return { dept, perf: calculatePerformance(deptTasks), empCount: deptEmps.length };
   }).sort((a, b) => b.perf.score - a.perf.score);
 

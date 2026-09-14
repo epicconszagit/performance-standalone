@@ -32,7 +32,7 @@ def get_department_members(dept_id):
     members = []
     for emp in all_employees:
         dept_ids = emp.department_ids if isinstance(emp.department_ids, list) else []
-        if emp.department_id == dept.id or dept.id in dept_ids:
+        if emp.department_id == dept.id or dept.id in dept_ids or (dept.manager_id and dept.manager_id == emp.id):
             emp_dict = emp.to_dict()
             emp_dict["is_primary_department"] = (emp.department_id == dept.id)
             members.append(emp_dict)

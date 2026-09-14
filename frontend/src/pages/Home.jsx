@@ -295,7 +295,12 @@ export default function Home() {
             ) : (
               <div className="space-y-2">
                 {departments.slice(0, 5).map((dept) => {
-                  const count = employees.filter((e) => e.department_id === dept.id && e.status === "active").length;
+                  const count = employees.filter((e) =>
+                    (e.department_id === dept.id ||
+                     (Array.isArray(e.department_ids) && e.department_ids.includes(dept.id)) ||
+                     (dept.manager_id && dept.manager_id === e.id)
+                    ) && e.status === "active"
+                  ).length;
                   return (
                     <div key={dept.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-50">
                       <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: dept.color || "#1e3a5f" }}>

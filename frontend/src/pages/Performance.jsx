@@ -66,8 +66,16 @@ export default function Performance() {
   const companyPerf = calculatePerformance(tasks);
 
   const deptPerfs = departments.map((dept) => {
-    const deptEmps = employees.filter((e) => e.department_id === dept.id);
-    const deptTasks = tasks.filter((t) => deptEmps.some((e) => (t.assigned_to_ids || []).includes(e.id)));
+    const deptEmps = employees.filter((e) =>
+      (e.department_id === dept.id ||
+       (Array.isArray(e.department_ids) && e.department_ids.includes(dept.id)) ||
+       (dept.manager_id && dept.manager_id === e.id)
+      ) && e.status === "active"
+    );
+    const deptTasks = tasks.filter((t) =>
+      t.department_id === dept.id ||
+      deptEmps.some((e) => (t.assigned_to_ids || []).includes(e.id))
+    );
     return { dept, perf: calculatePerformance(deptTasks), empCount: deptEmps.length };
   }).sort((a, b) => b.perf.score - a.perf.score);
 
