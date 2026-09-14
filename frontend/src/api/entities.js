@@ -21,7 +21,12 @@ export const ActionItem = makeEntity("action-items");
 export const Announcement = makeEntity("announcements");
 export const AuditLog = makeEntity("audit-logs");
 export const CompanyBranding = makeEntity("company-brandings");
-export const Department = makeEntity("departments");
+export const Department = {
+  ...makeEntity("departments"),
+  getMembers: (deptId) => apiClient.get(`/departments/${deptId}/members`),
+  addMembers: (deptId, data) => apiClient.post(`/departments/${deptId}/members`, data),
+  removeMember: (deptId, empId) => apiClient.delete(`/departments/${deptId}/members/${empId}`),
+};
 export const Employee = makeEntity("employees");
 export const Meeting = makeEntity("meetings");
 export const MeetingMinutes = makeEntity("meeting-minutes");

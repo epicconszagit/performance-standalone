@@ -37,6 +37,11 @@ def create_app(config_class=Config):
                 if "weight" not in task_cols:
                     db.session.execute(text("ALTER TABLE tasks ADD COLUMN weight INTEGER DEFAULT 2"))
                 db.session.commit()
+            if "employees" in tables:
+                emp_cols = [c["name"] for c in inspector.get_columns("employees")]
+                if "department_ids" not in emp_cols:
+                    db.session.execute(text("ALTER TABLE employees ADD COLUMN department_ids JSON"))
+                db.session.commit()
             if "todo_items" not in tables:
                 from .models import TodoItem
                 TodoItem.__table__.create(db.engine, checkfirst=True)
@@ -69,6 +74,9 @@ def create_app(config_class=Config):
 
     from .api.meetings_batch import meetings_batch_bp
     app.register_blueprint(meetings_batch_bp, url_prefix="/api")
+
+    from .api.department_members import department_members_bp
+    app.register_blueprint(department_members_bp, url_prefix="/api")
 
     from .scheduler import init_scheduler
     init_scheduler(app)

@@ -86,6 +86,7 @@ export default function Employees() {
       email: "",
       phone: "",
       department_id: "",
+      department_ids: [],
       position: "",
       role: "Staff Member",
       hire_date: "",
@@ -106,12 +107,16 @@ export default function Employees() {
       return;
     }
     setEditing(emp);
+    const existingDeptIds = Array.isArray(emp.department_ids)
+      ? emp.department_ids
+      : (emp.department_id ? [emp.department_id] : []);
     setForm({
       full_name: emp.full_name || "",
       personal_email: emp.personal_email || "",
       email: emp.email || "",
       phone: emp.phone || "",
       department_id: emp.department_id || "",
+      department_ids: existingDeptIds,
       position: emp.position || "",
       role: emp.role || "Staff Member",
       hire_date: emp.hire_date || "",
@@ -153,10 +158,15 @@ export default function Employees() {
     }
 
     const dept = departments.find((d) => d.id === form.department_id);
+    let deptIds = Array.isArray(form.department_ids) ? [...form.department_ids] : [];
+    if (form.department_id && !deptIds.includes(form.department_id)) {
+      deptIds.push(form.department_id);
+    }
     const otherEmails = employees.filter((emp) => emp.id !== editing?.id).map((emp) => emp.email);
     const email = form.email?.trim() || generateUniqueEmail(generateEmployeeEmailBase(form.full_name), otherEmails);
     const data = {
       ...form,
+      department_ids: deptIds,
       email,
       personal_email: form.personal_email?.trim() || "",
       department_name: dept?.name || "",
@@ -296,7 +306,9 @@ export default function Employees() {
       emp.full_name?.toLowerCase().includes(search.toLowerCase()) ||
       emp.email?.toLowerCase().includes(search.toLowerCase()) ||
       emp.position?.toLowerCase().includes(search.toLowerCase());
-    const matchDept = filterDept === "all" || emp.department_id === filterDept;
+    const matchDept = filterDept === "all" ||
+      emp.department_id === filterDept ||
+      (Array.isArray(emp.department_ids) && emp.department_ids.includes(filterDept));
     const matchRole = filterRole === "all" || emp.role === filterRole;
     return matchSearch && matchDept && matchRole;
   });
@@ -408,7 +420,19 @@ export default function Employees() {
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
-                    <p className="text-sm text-slate-600">{emp.department_name || "—"}</p>
+                    <p className="text-sm font-medium text-slate-800">{emp.department_name || "—"}</p>
+                    {Array.isArray(emp.department_ids) && emp.department_ids.filter((id) => id !== emp.department_id).length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {emp.department_ids.filter((id) => id !== emp.department_id).map((did) => {
+                          const d = departments.find((dept) => dept.id === did);
+                          return d ? (
+                            <span key={did} className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                              +{d.name}
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     <RoleBadge role={emp.role} />
@@ -536,7 +560,7 @@ export default function Employees() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Department</Label>
+                  <Label>Primary Department</Label>
                   <Select value={form.department_id} onValueChange={(v) => setForm({ ...form, department_id: v })}>
                     <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                     <SelectContent>
@@ -554,6 +578,35 @@ export default function Employees() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs text-slate-600">Additional / Cross-Departments (Optional)</Label>
+                <p className="text-[11px] text-slate-400 mb-1.5">Staff member will be included and active in these departments as well.</p>
+                <div className="flex flex-wrap gap-1.5 p-2 rounded-lg bg-slate-50 border border-slate-200">
+                  {departments.filter((d) => d.id !== form.department_id).map((d) => {
+                    const isSelected = (form.department_ids || []).includes(d.id);
+                    return (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => {
+                          const current = form.department_ids || [];
+                          const updated = isSelected ? current.filter((id) => id !== d.id) : [...current, d.id];
+                          setForm({ ...form, department_ids: updated });
+                        }}
+                        className={cn(
+                          "px-2.5 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1 border",
+                          isSelected
+                            ? "bg-amber-100 text-amber-900 border-amber-300 font-semibold"
+                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                        )}
+                      >
+                        {isSelected && <Check className="w-3 h-3 text-amber-700" />}
+                        {d.name}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <div>

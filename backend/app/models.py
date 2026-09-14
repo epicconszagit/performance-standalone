@@ -21,6 +21,15 @@ class BaseModel(db.Model):
             value = getattr(self, column.name)
             if isinstance(value, date):  # datetime is a subclass of date - covers both
                 value = value.isoformat()
+            elif column.name in ("department_ids", "assigned_to_ids", "assigned_to_names"):
+                if value is None:
+                    value = []
+                elif isinstance(value, str):
+                    try:
+                        import json
+                        value = json.loads(value)
+                    except Exception:
+                        value = []
             result[column.name] = value
         return result
 
@@ -70,6 +79,7 @@ class Employee(BaseModel):
     user_id = db.Column(db.String(36))
     department_id = db.Column(db.String(36))
     department_name = db.Column(db.String(255))
+    department_ids = db.Column(db.JSON, default=list)
     position = db.Column(db.String(255))
     role = db.Column(db.String(50), nullable=False, default="Staff Member")
     manager_id = db.Column(db.String(36))

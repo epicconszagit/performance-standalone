@@ -44,6 +44,16 @@ def _coerce_value(column, value):
                         return parsed.date() if col_type == "Date" else parsed
                     except Exception:
                         continue
+    if col_type == "JSON":
+        if value in (None, ""):
+            return []
+        if isinstance(value, str):
+            import json
+            try:
+                return json.loads(value)
+            except Exception:
+                return []
+        return value
     return value
 
 
