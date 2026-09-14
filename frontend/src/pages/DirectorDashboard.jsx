@@ -3,7 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import { BarChart3, TrendingUp, TrendingDown, Minus, Award, AlertTriangle, Building2, Users, CheckCircle2, Clock, FileText } from "lucide-react";
 import { Task, Employee, Department } from "@/api/entities";
 import StatCard from "@/components/StatCard";
-import { calculatePerformance, getClassificationColor } from "@/lib/performance";
+import { calculatePerformance, getClassificationColor, isAdministratorRole } from "@/lib/performance";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +42,8 @@ export default function DirectorDashboard() {
   }
 
   const companyPerf = calculatePerformance(tasks);
-  const activeEmployees = employees.filter((e) => e.status === "active");
+  // Exclude administrators who oversee operations and do not receive task assignments
+  const activeEmployees = employees.filter((e) => e.status === "active" && !isAdministratorRole(e));
 
   const allPerfs = activeEmployees.map((emp) => {
     const empTasks = tasks.filter((t) => (t.assigned_to_ids || []).includes(emp.id));
@@ -50,7 +51,10 @@ export default function DirectorDashboard() {
   });
 
   const avgScore = allPerfs.length > 0 ? Math.round(allPerfs.reduce((s, p) => s + p.perf.score, 0) / allPerfs.length) : 0;
-  const topPerformers = [...allPerfs].sort((a, b) => b.perf.score - a.perf.score).slice(0, 5);
+  const topPerformers = [...allPerfs]
+    .filter((p) => p.perf.assigned > 0 || p.perf.score > 0)
+    .sort((a, b) => b.perf.score - a.perf.score)
+    .slice(0, 5);
   const needsAttention = [...allPerfs].filter((p) => p.perf.score < 60 && p.perf.assigned > 0).sort((a, b) => a.perf.score - b.perf.score);
 
   const deptPerfs = departments.map((dept) => {

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import StatCard from "@/components/StatCard";
 import { RoleBadge } from "@/components/Badges";
-import { calculatePerformance, getClassificationColor, formatDate } from "@/lib/performance";
+import { calculatePerformance, getClassificationColor, formatDate, isAdministratorRole } from "@/lib/performance";
 import { exportPerformancePDF, exportCSV } from "@/lib/exportReport";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
@@ -23,9 +23,11 @@ export default function Performance() {
   const [period, setPeriod] = useState("Monthly");
 
   const isAdmin = ["Super Administrator", "Administrator", "Director of Operations", "Department Manager"].includes(role);
+  // Exclude administrators who oversee operations rather than receiving performance task assignments
+  const perfEmployees = employees.filter((e) => !isAdministratorRole(e) && e.status === "active");
   const scopedEmployees = (role === "Department Manager" && employee)
-    ? employees.filter((e) => e.department_id === employee.department_id)
-    : employees;
+    ? perfEmployees.filter((e) => e.department_id === employee.department_id || (Array.isArray(e.department_ids) && e.department_ids.includes(employee.department_id)))
+    : perfEmployees;
 
   const loadData = async () => {
     try {
@@ -35,12 +37,21 @@ export default function Performance() {
         Department.list("-created_date", 100),
         PerformanceReport.list("-generated_date", 200),
       ]);
+      const validEmps = (emps || []).filter((e) => !isAdministratorRole(e) && e.status === "active");
+      const initialScoped = (role === "Department Manager" && employee)
+        ? validEmps.filter((e) => e.department_id === employee.department_id || (Array.isArray(e.department_ids) && e.department_ids.includes(employee.department_id)))
+        : validEmps;
+
       setTasks((allTasks || []).filter((t) => !t.deleted));
       setEmployees(emps || []);
       setDepartments(depts || []);
-      setReports(reps || []);
-      if (employee && !isAdmin) setSelectedEmployee(employee);
-      else if (emps?.length > 0) setSelectedEmployee(emps[0]);
+      setReports((reps || []).filter((r) => {
+        const empMatch = (emps || []).find((e) => e.id === r.employee_id);
+        return !empMatch || !isAdministratorRole(empMatch);
+      }));
+      if (employee && !isAdministratorRole(employee)) setSelectedEmployee(employee);
+      else if (initialScoped?.length > 0) setSelectedEmployee(initialScoped[0]);
+      else if (validEmps?.length > 0) setSelectedEmployee(validEmps[0]);
     } catch (e) {
       toast({ title: "Error", description: "Failed to load performance data", variant: "destructive" });
     } finally {
@@ -60,8 +71,13 @@ export default function Performance() {
     return { employee: emp, perf: calculatePerformance(empTasks) };
   });
 
-  const topPerformers = [...allPerfs].sort((a, b) => b.perf.score - a.perf.score).slice(0, 5);
-  const needsAttention = [...allPerfs].filter((p) => p.perf.score < 60 && p.perf.assigned > 0).sort((a, b) => a.perf.score - b.perf.score);
+  const topPerformers = [...allPerfs]
+    .filter((p) => p.perf.assigned > 0 || p.perf.score > 0)
+    .sort((a, b) => b.perf.score - a.perf.score)
+    .slice(0, 5);
+  const needsAttention = [...allPerfs]
+    .filter((p) => p.perf.score < 60 && p.perf.assigned > 0)
+    .sort((a, b) => a.perf.score - b.perf.score);
 
   const companyPerf = calculatePerformance(tasks);
 
@@ -70,7 +86,7 @@ export default function Performance() {
       (e.department_id === dept.id ||
        (Array.isArray(e.department_ids) && e.department_ids.includes(dept.id)) ||
        (dept.manager_id && dept.manager_id === e.id)
-      ) && e.status === "active"
+      ) && e.status === "active" && !isAdministratorRole(e)
     );
     const deptTasks = tasks.filter((t) =>
       t.department_id === dept.id ||
@@ -81,6 +97,10 @@ export default function Performance() {
 
   const generateReport = async () => {
     if (!selectedEmployee) return;
+    if (isAdministratorRole(selectedEmployee)) {
+      toast({ title: "Blocked", description: "Performance reports cannot be generated for Administrators.", variant: "destructive" });
+      return;
+    }
     const now = new Date();
     const label = `${period} - ${now.toLocaleDateString("en-US", { month: "long", year: "numeric" })}`;
     try {
@@ -214,7 +234,7 @@ export default function Performance() {
 
       {isAdmin && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard icon={Users} label="Total Staff" value={employees.filter((e) => e.status === "active").length} accent="navy" />
+          <StatCard icon={Users} label="Total Staff" value={employees.filter((e) => e.status === "active" && !isAdministratorRole(e)).length} accent="navy" />
           <StatCard icon={Building2} label="Departments" value={departments.length} accent="blue" />
           <StatCard icon={TrendingUp} label="Company Productivity" value={`${companyPerf.productivity}%`} accent="emerald" />
           <StatCard icon={Award} label="Avg Score" value={allPerfs.length > 0 ? Math.round(allPerfs.reduce((s, p) => s + p.perf.score, 0) / allPerfs.length) : 0} accent="gold" />

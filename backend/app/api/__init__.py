@@ -370,7 +370,27 @@ def build_entities_blueprint():
         owner_field="user_id",
         after_create=on_create_notification,
     )
-    register_entity(bp, PerformanceReport, "performance-reports", create="admin", update="admin", delete="admin")
+    def filter_performance_reports(reports, user):
+        if not reports:
+            return []
+        admin_emp_ids = {
+            e.id for e in Employee.query.filter(
+                (Employee.role.in_(("Super Administrator", "Administrator"))) |
+                (Employee.role.ilike("%admin%")) |
+                (Employee.email == "epiccons.za@gmail.com")
+            ).all()
+        }
+        return [r for r in reports if r.employee_id not in admin_emp_ids]
+
+    register_entity(
+        bp,
+        PerformanceReport,
+        "performance-reports",
+        create="admin",
+        update="admin",
+        delete="admin",
+        list_filter=filter_performance_reports,
+    )
     register_entity(
         bp,
         Report,
@@ -436,6 +456,18 @@ def build_entities_blueprint():
         else:
             task.weight = PRIORITY_WEIGHTS.get(prio, 2)
 
+        # 4. Department assignment
+        if not getattr(task, "department_id", None):
+            dept_candidate = (data.get("department_id") if data else None)
+            if dept_candidate:
+                task.department_id = dept_candidate
+            elif assignee_ids:
+                first_emp = Employee.query.get(assignee_ids[0])
+                if first_emp and first_emp.department_id:
+                    task.department_id = first_emp.department_id
+            elif emp and emp.department_id:
+                task.department_id = emp.department_id
+
         return None
 
     def validate_task_update(task, user, data=None):
@@ -499,7 +531,113 @@ def build_entities_blueprint():
             elif "priority" in data:
                 task.weight = PRIORITY_WEIGHTS.get(prio, 2)
 
+        # 4. Department assignment
+        if data and "department_id" in data and data.get("department_id"):
+            task.department_id = data.get("department_id")
+        elif not getattr(task, "department_id", None):
+            assignee_ids = (data.get("assigned_to_ids") if data else None) or getattr(task, "assigned_to_ids", []) or []
+            if assignee_ids:
+                first_emp = Employee.query.get(assignee_ids[0])
+                if first_emp and first_emp.department_id:
+                    task.department_id = first_emp.department_id
+            elif emp and emp.department_id:
+                task.department_id = emp.department_id
+
         return None
+
+    def filter_tasks(tasks, user):
+        if not user:
+            return []
+
+        # Self-healing backfill for any legacy tasks missing department_id
+        try:
+            tasks_no_dept = [t for t in tasks if not getattr(t, "department_id", None)]
+            if tasks_no_dept:
+                emp_map = {e.id: e.department_id for e in Employee.query.all() if e.department_id}
+                updated = False
+                for t in tasks_no_dept:
+                    a_ids = t.assigned_to_ids or []
+                    if isinstance(a_ids, str):
+                        try:
+                            import json
+                            a_ids = json.loads(a_ids)
+                        except Exception:
+                            a_ids = []
+                    for aid in a_ids:
+                        d_id = emp_map.get(aid)
+                        if d_id:
+                            t.department_id = d_id
+                            updated = True
+                            break
+                if updated:
+                    db.session.commit()
+        except Exception:
+            pass
+
+        # Executive overseers oversee all operations across all departments
+        emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
+        emp_role = emp.role if emp else user.role
+        if user.role == "admin" or emp_role in ("Super Administrator", "Administrator", "Director of Operations"):
+            return tasks
+
+        emp_id = emp.id if emp else None
+        emp_dept_ids = set()
+        if emp:
+            if emp.department_id:
+                emp_dept_ids.add(emp.department_id)
+            if emp.department_ids and isinstance(emp.department_ids, list):
+                for d in emp.department_ids:
+                    if d:
+                        emp_dept_ids.add(d)
+
+        emp_dept_map = {}
+        for e in Employee.query.all():
+            d_ids = set()
+            if e.department_id:
+                d_ids.add(e.department_id)
+            if e.department_ids and isinstance(e.department_ids, list):
+                for d in e.department_ids:
+                    if d:
+                        d_ids.add(d)
+            emp_dept_map[e.id] = d_ids
+
+        allowed = []
+        for t in tasks:
+            assignee_ids = t.assigned_to_ids or []
+            if isinstance(assignee_ids, str):
+                try:
+                    import json
+                    assignee_ids = json.loads(assignee_ids)
+                except Exception:
+                    assignee_ids = []
+
+            # 1. Directly assigned to user/employee
+            if (emp_id and emp_id in assignee_ids) or (user.id in assignee_ids):
+                allowed.append(t)
+                continue
+
+            # 2. Assigned by or created by this user/employee
+            if (emp_id and t.assigned_by_id == emp_id) or t.assigned_by_id == user.id or t.created_by_id == user.id:
+                allowed.append(t)
+                continue
+
+            # 3. Task matches employee's department
+            if t.department_id and t.department_id in emp_dept_ids:
+                allowed.append(t)
+                continue
+
+            # 4. Any assignee on the task belongs to employee's department
+            if emp_dept_ids and assignee_ids:
+                has_dept_assignee = False
+                for aid in assignee_ids:
+                    if emp_dept_map.get(aid, set()) & emp_dept_ids:
+                        has_dept_assignee = True
+                        break
+                if has_dept_assignee:
+                    allowed.append(t)
+                    continue
+
+        return allowed
 
     register_entity(
         bp,
@@ -508,6 +646,7 @@ def build_entities_blueprint():
         create="any",
         update="any",
         delete="owner_or_admin",
+        list_filter=filter_tasks,
         before_create=validate_task_create,
         before_update=validate_task_update,
     )

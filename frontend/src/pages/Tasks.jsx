@@ -15,7 +15,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusBadge, PriorityBadge } from "@/components/Badges";
-import { isOverdue, getEffectiveStatus, formatDate, formatDateTime, logAudit, createNotification, PRIORITY_WEIGHTS } from "@/lib/performance";
+import {
+  isOverdue,
+  getEffectiveStatus,
+  formatDate,
+  formatDateTime,
+  logAudit,
+  createNotification,
+  PRIORITY_WEIGHTS,
+  isAdministratorRole,
+  isTaskRelatedToEmployee,
+} from "@/lib/performance";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -23,9 +33,9 @@ const STATUSES = ["Pending", "In Progress", "Submitted", "Completed", "Archived"
 const TABS = [
   { key: "all", label: "All", icon: CheckSquare },
   { key: "pending", label: "Pending", icon: Clock },
-  { key: "in_progress", label: "In Progress", icon: Clock },
+  { key: "in_progress", label: "In Progress", icon: PlayCircle },
   { key: "submitted", label: "Submitted", icon: Send },
-  { key: "overdue", label: "Overdue", icon: AlertTriangle },
+  { key: "overdue", label: "Overdue", icon: AlertCircle },
   { key: "completed", label: "Completed", icon: CheckCircle2 },
   { key: "archived", label: "Archived", icon: Archive },
   { key: "trash", label: "Trash", icon: Trash2, adminOnly: true },
@@ -53,23 +63,15 @@ export default function Tasks() {
     priority: "Medium", weight: 2,
     deadline: "", expected_completion_date: "",
     attachment_file_url: "", attachment_file_name: "",
+    department_id: "",
   });
 
   const isAdmin = ["Super Administrator", "Administrator", "Director of Operations", "Department Manager"].includes(role);
+  const isExecutiveAdmin = ["Super Administrator", "Administrator", "Director of Operations"].includes(role) || user?.role === "admin";
   const isSecretary = role === "Secretary";
   const canAssignToAnyone = ["Super Administrator", "Administrator", "Director of Operations", "Department Manager"].includes(role);
 
-  const isAdministrator = (emp) => {
-    if (!emp) return false;
-    const r = emp.role || "";
-    const name = emp.full_name || "";
-    return (
-      ["Super Administrator", "Administrator"].includes(r) ||
-      r.toLowerCase().includes("admin") ||
-      name.toLowerCase() === "super administrator" ||
-      name.toLowerCase() === "administrator"
-    );
-  };
+  const isAdministrator = (emp) => isAdministratorRole(emp);
 
   const isAssignee = (task) => !!(employee && (task.assigned_to_ids || []).includes(employee.id));
   const isAssigner = (task) => {
@@ -88,12 +90,9 @@ export default function Tasks() {
         Department.list("-created_date", 100),
       ]);
       let myTasks = allTasks || [];
-      if (!isAdmin && !isSecretary) {
-        // No linked employee record means we can't tell which tasks are theirs -
-        // show none rather than leaking every task in the company.
-        myTasks = employee ? (allTasks || []).filter((t) => (t.assigned_to_ids || []).includes(employee.id)) : [];
-      } else if (role === "Department Manager") {
-        myTasks = employee ? (allTasks || []).filter((t) => !t.department_id || t.department_id === employee.department_id || (t.assigned_to_ids || []).includes(employee.id)) : [];
+      if (!isExecutiveAdmin) {
+        // Staff, Supervisors, and Department Managers only see tasks related to them and their department
+        myTasks = employee ? (allTasks || []).filter((t) => isTaskRelatedToEmployee(t, employee, emps || [])) : [];
       }
       const activeTasks = myTasks.filter((t) => !t.deleted);
       setTasks(activeTasks);
@@ -172,6 +171,7 @@ export default function Tasks() {
       expected_completion_date: prefill.expected_completion_date || "",
       attachment_file_url: prefill.attachment_file_url || "",
       attachment_file_name: prefill.attachment_file_name || "",
+      department_id: prefill.department_id || "",
     });
     setShowForm(true);
   };
@@ -188,6 +188,7 @@ export default function Tasks() {
       expected_completion_date: task.expected_completion_date || "",
       attachment_file_url: task.attachment_file_url || "",
       attachment_file_name: task.attachment_file_name || "",
+      department_id: task.department_id || "",
     });
     setShowForm(true);
   };
@@ -259,9 +260,12 @@ export default function Tasks() {
     const assignedNames = finalAssigneeIds
       .map((id) => employees.find((emp) => emp.id === id)?.full_name)
       .filter(Boolean);
+    const firstAssignee = finalAssigneeIds.length > 0 ? employees.find((emp) => emp.id === finalAssigneeIds[0]) : null;
+    const taskDeptId = form.department_id || firstAssignee?.department_id || employee?.department_id || null;
     const data = {
       title: form.title,
       description: form.description,
+      department_id: taskDeptId,
       assigned_to_ids: finalAssigneeIds,
       assigned_to_names: assignedNames,
       assigned_by_id: performer.id,
@@ -787,6 +791,23 @@ export default function Tasks() {
               <div>
                 <Label>Description</Label>
                 <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} />
+              </div>
+              <div>
+                <Label className="mb-1 block">Department</Label>
+                <Select
+                  value={form.department_id || "auto"}
+                  onValueChange={(val) => setForm({ ...form, department_id: val === "auto" ? "" : val })}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Automatic (from Assignees)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Automatic (from Assignees / Creator)</SelectItem>
+                    {departments.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label className="mb-1 block">Assign To *</Label>

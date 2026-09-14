@@ -7,7 +7,7 @@ import {
 import { Task, Employee, Department, Announcement } from "@/api/entities";
 import StatCard from "@/components/StatCard";
 import { StatusBadge } from "@/components/Badges";
-import { isOverdue, calculatePerformance, formatDate, formatDateTime, daysUntil, getClassificationColor } from "@/lib/performance";
+import { isOverdue, calculatePerformance, formatDate, formatDateTime, daysUntil, getClassificationColor, isTaskRelatedToEmployee } from "@/lib/performance";
 import { checkDeadlineReminders } from "@/lib/deadlineReminders";
 import { getUpcomingBirthdays } from "@/lib/birthdayReminders";
 import { cn } from "@/lib/utils";
@@ -35,7 +35,7 @@ export default function Home() {
         let myTasks = allTasks || [];
         if (!isAdmin) {
           myTasks = employee
-            ? (allTasks || []).filter((t) => (t.assigned_to_ids || []).includes(employee.id))
+            ? (allTasks || []).filter((t) => isTaskRelatedToEmployee(t, employee, allEmps || []))
             : [];
         }
 

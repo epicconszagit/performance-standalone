@@ -183,3 +183,64 @@ export function daysUntil(dateStr) {
   target.setHours(0, 0, 0, 0);
   return Math.round((target - now) / (1000 * 60 * 60 * 24));
 }
+
+export function isAdministratorRole(emp) {
+  if (!emp) return false;
+  const r = (emp.role || "").trim().toLowerCase();
+  const name = (emp.full_name || "").trim().toLowerCase();
+  const email = (emp.email || "").trim().toLowerCase();
+  return (
+    r === "super administrator" ||
+    r === "administrator" ||
+    r.includes("super admin") ||
+    r === "admin" ||
+    name === "super administrator" ||
+    name === "administrator" ||
+    email === "epiccons.za@gmail.com"
+  );
+}
+
+export function isTaskRelatedToEmployee(task, employee, employeesList = []) {
+  if (!employee) return false;
+
+  const empId = employee.id;
+  const userId = employee.user_id;
+  const empDeptIds = [
+    employee.department_id,
+    ...(Array.isArray(employee.department_ids) ? employee.department_ids : [])
+  ].filter(Boolean);
+
+  const assigneeIds = Array.isArray(task.assigned_to_ids) ? task.assigned_to_ids : [];
+
+  // 1. Directly assigned to this employee / user
+  if (assigneeIds.includes(empId) || (userId && assigneeIds.includes(userId))) {
+    return true;
+  }
+
+  // 2. Created or assigned by this employee / user
+  if (task.assigned_by_id === empId || (userId && task.assigned_by_id === userId) || (userId && task.created_by_id === userId)) {
+    return true;
+  }
+
+  // 3. Task explicitly belongs to employee's department
+  if (task.department_id && empDeptIds.includes(task.department_id)) {
+    return true;
+  }
+
+  // 4. Any assignee on the task belongs to employee's department
+  if (empDeptIds.length > 0 && assigneeIds.length > 0) {
+    const assigneeEmps = assigneeIds
+      .map((id) => employeesList.find((e) => e.id === id))
+      .filter(Boolean);
+
+    if (assigneeEmps.some((a) => {
+      if (a.department_id && empDeptIds.includes(a.department_id)) return true;
+      if (Array.isArray(a.department_ids) && a.department_ids.some((d) => empDeptIds.includes(d))) return true;
+      return false;
+    })) {
+      return true;
+    }
+  }
+
+  return false;
+}
