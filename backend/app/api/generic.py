@@ -17,10 +17,33 @@ def _coerce_value(column, value):
     if col_type in ("Date", "DateTime"):
         if value in (None, ""):
             return None
+        if isinstance(value, (datetime, date)):
+            if col_type == "Date" and isinstance(value, datetime):
+                return value.date()
+            return value
         if isinstance(value, str):
-            iso_value = value[:-1] + "+00:00" if value.endswith("Z") else value
-            parsed = datetime.fromisoformat(iso_value)
-            return parsed.date() if col_type == "Date" else parsed
+            clean_str = value.strip()
+            if not clean_str:
+                return None
+            try:
+                iso_value = clean_str[:-1] + "+00:00" if clean_str.endswith("Z") else clean_str
+                parsed = datetime.fromisoformat(iso_value)
+                return parsed.date() if col_type == "Date" else parsed
+            except Exception:
+                for fmt in (
+                    "%Y-%m-%dT%H:%M:%S",
+                    "%Y-%m-%dT%H:%M",
+                    "%Y-%m-%d %H:%M:%S",
+                    "%Y-%m-%d %H:%M",
+                    "%Y-%m-%d",
+                    "%m/%d/%Y %I:%M %p",
+                    "%m/%d/%Y",
+                ):
+                    try:
+                        parsed = datetime.strptime(clean_str, fmt)
+                        return parsed.date() if col_type == "Date" else parsed
+                    except Exception:
+                        continue
     return value
 
 
@@ -61,7 +84,18 @@ def current_user():
 
 
 def _is_admin(user):
-    return user is not None and user.role == "admin"
+    if user is None:
+        return False
+    if user.role == "admin":
+        return True
+    try:
+        from ..models import Employee
+        emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
+        if emp and emp.role in ("Super Administrator", "Administrator", "Director of Operations"):
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def check_permission(rule, user, obj, owner_field):
@@ -152,13 +186,13 @@ def register_entity(
         _apply_fields(model, obj, data)
         if hasattr(model, owner_field) and not getattr(obj, owner_field, None) and user is not None:
             setattr(obj, owner_field, user.id)
-        missing = _missing_required_fields(model, obj)
-        if missing:
-            return jsonify({"error": f"Missing required field(s): {', '.join(missing)}"}), 400
         if before_create:
             err = before_create(obj, user, data)
             if err:
                 return jsonify({"error": err}), 400
+        missing = _missing_required_fields(model, obj)
+        if missing:
+            return jsonify({"error": f"Missing required field(s): {', '.join(missing)}"}), 400
         db.session.add(obj)
         try:
             db.session.commit()

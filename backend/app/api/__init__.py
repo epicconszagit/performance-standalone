@@ -542,15 +542,38 @@ def build_entities_blueprint():
     def before_create_todo_item(todo, user, data=None):
         if not user:
             return "Authentication required"
+        if not getattr(todo, "title", None) or not str(todo.title).strip():
+            return "Title is required"
+
         emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
-        if emp:
-            todo.employee_id = emp.id
-            todo.employee_name = emp.full_name
-            todo.department_id = emp.department_id
+        if not getattr(todo, "employee_id", None):
+            if emp:
+                todo.employee_id = emp.id
+                todo.employee_name = emp.full_name
+                todo.department_id = emp.department_id
+            else:
+                todo.employee_id = user.id
+                todo.employee_name = user.full_name or user.email
         else:
-            todo.employee_id = user.id
-            todo.employee_name = user.full_name or user.email
-        todo.created_by_id = user.id
+            if not getattr(todo, "employee_name", None):
+                target_emp = Employee.query.get(todo.employee_id)
+                if target_emp:
+                    todo.employee_name = target_emp.full_name
+                    if not getattr(todo, "department_id", None):
+                        todo.department_id = target_emp.department_id
+                elif emp and todo.employee_id == emp.id:
+                    todo.employee_name = emp.full_name
+                    if not getattr(todo, "department_id", None):
+                        todo.department_id = emp.department_id
+                elif todo.employee_id == user.id:
+                    todo.employee_name = user.full_name or user.email
+
+        if not getattr(todo, "created_by_id", None):
+            todo.created_by_id = user.id
+
+        if getattr(todo, "completed", None) is None:
+            todo.completed = False
+
         return None
 
     register_entity(

@@ -60,7 +60,7 @@ export default function TodoList() {
       setEmployees(emps || []);
       setDepartments(depts || []);
     } catch (err) {
-      toast({ title: "Error", description: "Failed to load to-do items", variant: "destructive" });
+      toast({ title: "Error", description: err?.message || "Failed to load to-do items", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -90,6 +90,9 @@ export default function TodoList() {
         priority: newPriority,
         due_date: newDueDate || null,
         completed: false,
+        employee_id: employee?.id || user?.id,
+        employee_name: employee?.full_name || user?.full_name || user?.email,
+        department_id: employee?.department_id || null,
       });
       toast({ title: "Created", description: "To-do item added to your personal list" });
       setNewTitle("");
@@ -99,7 +102,7 @@ export default function TodoList() {
       setShowAddForm(false);
       loadData();
     } catch (err) {
-      toast({ title: "Error", description: "Failed to create to-do item", variant: "destructive" });
+      toast({ title: "Error", description: err?.message || "Failed to create to-do item", variant: "destructive" });
     }
   };
 
@@ -113,7 +116,7 @@ export default function TodoList() {
       });
       loadData();
     } catch (err) {
-      toast({ title: "Error", description: "Failed to update item", variant: "destructive" });
+      toast({ title: "Error", description: err?.message || "Failed to update item", variant: "destructive" });
     }
   };
 
@@ -125,7 +128,7 @@ export default function TodoList() {
       toast({ title: "Deleted", description: "To-do item removed" });
       loadData();
     } catch (err) {
-      toast({ title: "Error", description: "Failed to delete item", variant: "destructive" });
+      toast({ title: "Error", description: err?.message || "Failed to delete item", variant: "destructive" });
     }
   };
 
@@ -144,7 +147,7 @@ export default function TodoList() {
       setEditingTodo(null);
       loadData();
     } catch (err) {
-      toast({ title: "Error", description: "Failed to update item", variant: "destructive" });
+      toast({ title: "Error", description: err?.message || "Failed to update item", variant: "destructive" });
     }
   };
 
