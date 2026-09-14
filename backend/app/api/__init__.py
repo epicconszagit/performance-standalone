@@ -360,6 +360,21 @@ def build_entities_blueprint():
             import logging
             logging.getLogger("notifications").exception("Failed to dispatch notification email: %s", e)
 
+    def filter_notifications(notifs, user):
+        if not user:
+            return []
+        emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
+        emp_role = emp.role if emp else user.role
+        # Executive leadership and Department Managers can view team/department notifications
+        if user.role == "admin" or emp_role in ("Super Administrator", "Administrator", "Director of Operations", "Department Manager"):
+            return notifs
+
+        emp_id = emp.id if emp else None
+        return [
+            n for n in notifs
+            if n.user_id == user.id or (emp_id and n.employee_id == emp_id) or (emp_id and n.user_id == emp_id)
+        ]
+
     register_entity(
         bp,
         Notification,
@@ -368,6 +383,7 @@ def build_entities_blueprint():
         update="owner_or_admin",
         delete="owner_or_admin",
         owner_field="user_id",
+        list_filter=filter_notifications,
         after_create=on_create_notification,
     )
     def filter_performance_reports(reports, user):
