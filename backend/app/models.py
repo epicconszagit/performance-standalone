@@ -315,3 +315,16 @@ class TodoItem(BaseModel):
     completed_date = db.Column(db.DateTime)
     created_by_id = db.Column(db.String(36))
 
+
+class TaskFeedback(BaseModel):
+    __tablename__ = "task_feedback"
+
+    task_id = db.Column(db.String(36), nullable=False)
+    sender_id = db.Column(db.String(36), nullable=False)
+    sender_name = db.Column(db.String(255), nullable=False)
+    sender_role = db.Column(db.String(100), default="Staff Member")
+    message = db.Column(db.Text, nullable=False)
+    attachment_file_url = db.Column(db.String(500))
+    attachment_file_name = db.Column(db.String(255))
+
+

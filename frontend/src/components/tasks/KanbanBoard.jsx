@@ -1,6 +1,6 @@
 import React from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { Clock, Pencil, Trash2, Archive, ArchiveRestore } from "lucide-react";
+import { Clock, Pencil, Trash2, Archive, ArchiveRestore, MessageSquare } from "lucide-react";
 import { isOverdue, formatDateTime } from "@/lib/performance";
 import { PriorityBadge } from "@/components/Badges";
 import { cn } from "@/lib/utils";
@@ -12,7 +12,17 @@ const COLUMNS = [
   { key: "Completed", label: "Done", color: "bg-emerald-100 text-emerald-700" },
 ];
 
-export default function KanbanBoard({ tasks, onMoveTask, onEditTask, onArchiveTask, onDeleteTask, canEditTask, isAdmin }) {
+export default function KanbanBoard({
+  tasks,
+  onMoveTask,
+  onEditTask,
+  onArchiveTask,
+  onDeleteTask,
+  canEditTask,
+  isAdmin,
+  onOpenFeedback,
+  feedbackCounts = {},
+}) {
   const onDragEnd = (result) => {
     const { destination, source, draggableId } = result;
     if (!destination) return;
@@ -78,19 +88,36 @@ export default function KanbanBoard({ tasks, onMoveTask, onEditTask, onArchiveTa
                                   </span>
                                 )}
                               </div>
-                              {isAdmin && (
-                                <div className="flex items-center gap-1 mt-2 pt-2 border-t border-slate-100">
-                                  <button onClick={() => onEditTask(task)} className="p-1 rounded hover:bg-slate-100 text-slate-500" title="Edit">
-                                    <Pencil className="w-3 h-3" />
-                                  </button>
-                                  <button onClick={() => onArchiveTask(task)} className="p-1 rounded hover:bg-slate-100 text-zinc-500" title="Archive">
-                                    {task.archived ? <ArchiveRestore className="w-3 h-3" /> : <Archive className="w-3 h-3" />}
-                                  </button>
-                                  <button onClick={() => onDeleteTask(task)} className="p-1 rounded hover:bg-red-50 text-red-500" title="Delete">
-                                    <Trash2 className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              )}
+                              <div className="flex items-center justify-between gap-1 mt-2 pt-2 border-t border-slate-100">
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenFeedback && onOpenFeedback(task)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-blue-600 p-1 rounded hover:bg-slate-100 transition-colors"
+                                  title="Open task feedback / discussion"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5 text-blue-500" />
+                                  <span>Feedback</span>
+                                  {feedbackCounts?.[task.id] > 0 && (
+                                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-600 text-white">
+                                      {feedbackCounts[task.id]}
+                                    </span>
+                                  )}
+                                </button>
+
+                                {isAdmin && (
+                                  <div className="flex items-center gap-1">
+                                    <button onClick={() => onEditTask(task)} className="p-1 rounded hover:bg-slate-100 text-slate-500" title="Edit">
+                                      <Pencil className="w-3 h-3" />
+                                    </button>
+                                    <button onClick={() => onArchiveTask(task)} className="p-1 rounded hover:bg-slate-100 text-zinc-500" title="Archive">
+                                      {task.archived ? <ArchiveRestore className="w-3 h-3" /> : <Archive className="w-3 h-3" />}
+                                    </button>
+                                    <button onClick={() => onDeleteTask(task)} className="p-1 rounded hover:bg-red-50 text-red-500" title="Delete">
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )}
                         </Draggable>

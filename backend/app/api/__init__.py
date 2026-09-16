@@ -15,6 +15,7 @@ from ..models import (
     PerformanceReport,
     Report,
     Task,
+    TaskFeedback,
     TodoItem,
     User,
 )
@@ -727,5 +728,174 @@ def build_entities_blueprint():
         before_create=before_create_todo_item,
     )
 
+    def filter_task_feedback(feedbacks, user):
+        if not user or user.role in ("admin", "Super Administrator", "Director of Operations"):
+            return feedbacks
+
+        emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
+        emp_role = emp.role if emp else user.role
+        if emp_role in ("Super Administrator", "Administrator", "Director of Operations"):
+            return feedbacks
+
+        # Filter feedback by whether user has access to view the parent task
+        task_ids = {f.task_id for f in feedbacks if f.task_id}
+        if not task_ids:
+            return []
+
+        tasks = Task.query.filter(Task.id.in_(task_ids)).all()
+        allowed_tasks = set(t.id for t in filter_tasks(tasks, user))
+        return [f for f in feedbacks if f.task_id in allowed_tasks]
+
+    def before_create_task_feedback(feedback, user, data=None):
+        if not user:
+            return "Authentication required"
+        if not getattr(feedback, "task_id", None):
+            return "Task ID is required"
+        if not getattr(feedback, "message", None) or not str(feedback.message).strip():
+            return "Message is required"
+
+        task = Task.query.get(feedback.task_id)
+        if not task:
+            return "Task not found"
+
+        emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
+        base_role = emp.role if emp else ("Administrator" if user.role == "admin" else "Staff Member")
+        sender_id = emp.id if emp else user.id
+        sender_name = emp.full_name if emp else (user.full_name or user.email)
+
+        # Check role relation to the task
+        task_assignees = task.assigned_to_ids or []
+        if isinstance(task_assignees, str):
+            try:
+                import json
+                task_assignees = json.loads(task_assignees)
+            except Exception:
+                task_assignees = []
+
+        if task.assigned_by_id in (user.id, getattr(emp, "id", None)):
+            role_tag = f"{base_role} (Assigner)"
+        elif user.id in task_assignees or (emp and emp.id in task_assignees):
+            role_tag = f"{base_role} (Assignee)"
+        elif user.role == "admin" or base_role in ("Super Administrator", "Administrator"):
+            role_tag = f"{base_role} (Management)"
+        else:
+            role_tag = base_role
+
+        feedback.sender_id = sender_id
+        feedback.sender_name = sender_name
+        feedback.sender_role = role_tag
+        return None
+
+    def after_create_task_feedback(feedback, user, data=None):
+        try:
+            task = Task.query.get(feedback.task_id)
+            if not task:
+                return
+
+            emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
+            sender_emp_id = emp.id if emp else None
+            sender_user_id = user.id
+
+            task_assignees = task.assigned_to_ids or []
+            if isinstance(task_assignees, str):
+                try:
+                    import json
+                    task_assignees = json.loads(task_assignees)
+                except Exception:
+                    task_assignees = []
+
+            # Determine notification recipients
+            recipients = set()
+            is_assigner = (task.assigned_by_id in (sender_user_id, sender_emp_id))
+            is_assignee = (sender_user_id in task_assignees or (sender_emp_id and sender_emp_id in task_assignees))
+
+            if is_assignee:
+                # Assignee sent a message -> notify the assigner
+                if task.assigned_by_id:
+                    recipients.add(task.assigned_by_id)
+            elif is_assigner:
+                # Assigner sent feedback -> notify all assignees
+                for aid in task_assignees:
+                    if aid:
+                        recipients.add(aid)
+            else:
+                # Someone else (e.g. manager / admin) commented -> notify both assigner and assignees
+                if task.assigned_by_id:
+                    recipients.add(task.assigned_by_id)
+                for aid in task_assignees:
+                    if aid:
+                        recipients.add(aid)
+
+            # Remove the sender from recipients
+            recipients.discard(sender_emp_id)
+            recipients.discard(sender_user_id)
+
+            snippet = feedback.message.strip()
+            if len(snippet) > 80:
+                snippet = snippet[:77] + "..."
+
+            for rec_id in recipients:
+                target_emp = Employee.query.get(rec_id)
+                target_user = None
+                target_user_id = None
+                target_emp_id = None
+
+                if target_emp:
+                    target_emp_id = target_emp.id
+                    target_user_id = target_emp.user_id
+                    if not target_user_id and target_emp.email:
+                        u = User.query.filter_by(email=target_emp.email).first()
+                        if u:
+                            target_user_id = u.id
+                else:
+                    target_user = User.query.get(rec_id)
+                    if target_user:
+                        target_user_id = target_user.id
+                        te = Employee.query.filter_by(user_id=target_user.id).first()
+                        if te:
+                            target_emp_id = te.id
+
+                if target_user_id or target_emp_id:
+                    notif = Notification(
+                        user_id=target_user_id or target_emp_id,
+                        employee_id=target_emp_id,
+                        title=f"Feedback on: {task.title[:40]}",
+                        message=f"{feedback.sender_name}: \"{snippet}\"",
+                        type="task_feedback",
+                        related_id=task.id,
+                        link=f"/tasks?feedback_task_id={task.id}",
+                    )
+                    db.session.add(notif)
+
+            # Audit log entry
+            log = AuditLog(
+                action="Sent Task Feedback",
+                entity_type="Task",
+                entity_id=task.id,
+                entity_name=task.title,
+                performed_by_id=feedback.sender_id,
+                performed_by_name=feedback.sender_name,
+                details=f"Feedback: {snippet}",
+            )
+            db.session.add(log)
+            db.session.commit()
+        except Exception as e:
+            import logging
+            logging.getLogger("api").warning("Failed in after_create_task_feedback: %s", e)
+
+    register_entity(
+        bp,
+        TaskFeedback,
+        "task-feedback",
+        create="any",
+        update="owner_or_admin",
+        delete="owner_or_admin",
+        owner_field="sender_id",
+        list_filter=filter_task_feedback,
+        before_create=before_create_task_feedback,
+        after_create=after_create_task_feedback,
+    )
+
     return bp
+
 

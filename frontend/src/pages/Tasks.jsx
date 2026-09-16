@@ -4,12 +4,13 @@ import {
   CheckSquare, Plus, Pencil, Trash2, X, Search, Archive, Clock,
   AlertTriangle, CheckCircle2, ArchiveRestore, LayoutGrid, List,
   Eye, FileText, Send, Check, XCircle, Paperclip, ListTodo,
-  PlayCircle, AlertCircle
+  PlayCircle, AlertCircle, MessageSquare
 } from "lucide-react";
-import { Task, Employee, Department } from "@/api/entities";
+import { Task, Employee, Department, TaskFeedback } from "@/api/entities";
 import { SendEmail, UploadFile } from "@/api/integrations";
 import KanbanBoard from "@/components/tasks/KanbanBoard";
 import SubmitReportDialog from "@/components/tasks/SubmitReportDialog";
+import TaskFeedbackDialog from "@/components/tasks/TaskFeedbackDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,6 +58,8 @@ export default function Tasks() {
   const [view, setView] = useState("list");
   const [reportTask, setReportTask] = useState(null);
   const [reportViewTask, setReportViewTask] = useState(null);
+  const [feedbackTask, setFeedbackTask] = useState(null);
+  const [feedbackCounts, setFeedbackCounts] = useState({});
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [form, setForm] = useState({
@@ -83,12 +86,26 @@ export default function Tasks() {
     return false;
   };
 
+  const loadFeedbackCounts = async () => {
+    try {
+      const list = await TaskFeedback.list("-created_date", 1000);
+      const counts = {};
+      (list || []).forEach((f) => {
+        if (f.task_id) {
+          counts[f.task_id] = (counts[f.task_id] || 0) + 1;
+        }
+      });
+      setFeedbackCounts(counts);
+    } catch (_) {}
+  };
+
   const loadData = async () => {
     try {
-      const [allTasks, emps, depts] = await Promise.all([
+      const [allTasks, emps, depts, feedbacks] = await Promise.all([
         Task.list("-created_date", 300),
         Employee.list("-created_date", 300),
         Department.list("-created_date", 100),
+        TaskFeedback.list("-created_date", 1000).catch(() => []),
       ]);
       let myTasks = allTasks || [];
       if (!isExecutiveAdmin) {
@@ -100,6 +117,15 @@ export default function Tasks() {
       setTrashedTasks(myTasks.filter((t) => t.deleted));
       setEmployees(emps || []);
       setDepartments(depts || []);
+
+      const counts = {};
+      (feedbacks || []).forEach((f) => {
+        if (f.task_id) {
+          counts[f.task_id] = (counts[f.task_id] || 0) + 1;
+        }
+      });
+      setFeedbackCounts(counts);
+
       if (employee) markTasksSeen(activeTasks, emps || []);
     } catch (e) {
       toast({ title: "Error", description: "Failed to load tasks", variant: "destructive" });
@@ -109,6 +135,17 @@ export default function Tasks() {
   };
 
   useEffect(() => { loadData(); }, [employee]);
+
+  // Handle opening feedback directly if redirected via notification (e.g. ?feedback_task_id=XYZ)
+  useEffect(() => {
+    const feedbackId = searchParams.get("feedback_task_id");
+    if (feedbackId && tasks.length > 0) {
+      const targetTask = tasks.find((t) => t.id === feedbackId);
+      if (targetTask) {
+        setFeedbackTask(targetTask);
+      }
+    }
+  }, [searchParams, tasks]);
 
   // Handle prefilling if redirected from To-Do list ("Convert to Official Task")
   useEffect(() => {
@@ -637,6 +674,8 @@ export default function Tasks() {
           onDeleteTask={handleDelete}
           canEditTask={canEditTask}
           isAdmin={isAdmin || isSecretary}
+          onOpenFeedback={(task) => setFeedbackTask(task)}
+          feedbackCounts={feedbackCounts}
         />
       ) : (
         <div className="space-y-3">
@@ -715,6 +754,20 @@ export default function Tasks() {
 
                       {/* Workflow actions */}
                       <div className="flex flex-wrap items-center gap-2 mt-3">
+                        <button
+                          type="button"
+                          onClick={() => setFeedbackTask(task)}
+                          className="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors flex items-center gap-1.5"
+                          title="Ask questions, leave feedback, or discuss this task"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Feedback</span>
+                          {feedbackCounts[task.id] > 0 && (
+                            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-blue-600 text-white">
+                              {feedbackCounts[task.id]}
+                            </span>
+                          )}
+                        </button>
                         {assignee && task.status === "Pending" && (
                           <button onClick={() => handleStart(task)}
                             className="text-xs font-medium px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors flex items-center gap-1">
@@ -958,8 +1011,43 @@ export default function Tasks() {
             {reportViewTask.rejection_reason && (
               <p className="text-xs text-red-500 mt-3">Rejection reason: {reportViewTask.rejection_reason}</p>
             )}
+
+            <div className="mt-5 pt-3 border-t border-slate-200 flex items-center justify-between gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  const t = reportViewTask;
+                  setReportViewTask(null);
+                  setFeedbackTask(t);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-blue-600" /> Discuss / Send Feedback
+                {feedbackCounts[reportViewTask.id] > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-blue-600 text-white font-bold">
+                    {feedbackCounts[reportViewTask.id]}
+                  </span>
+                )}
+              </button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setReportViewTask(null)}>
+                Close
+              </Button>
+            </div>
           </div>
         </div>
+      )}
+
+      {/* Task Feedback & Discussion Dialog */}
+      {feedbackTask && (
+        <TaskFeedbackDialog
+          task={feedbackTask}
+          currentUser={user}
+          currentEmployee={employee}
+          onClose={() => {
+            setFeedbackTask(null);
+            loadFeedbackCounts();
+          }}
+        />
       )}
     </div>
   );
