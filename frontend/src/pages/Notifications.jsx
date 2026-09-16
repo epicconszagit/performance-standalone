@@ -32,6 +32,9 @@ const TYPE_ICONS = {
   task_approved: "🎉",
   task_rejected: "↩️",
   task_feedback: "💬",
+  report_received: "📑",
+  report_feedback: "💬",
+  report_updated: "🔄",
 };
 
 const TYPE_LABELS = {
@@ -50,6 +53,9 @@ const TYPE_LABELS = {
   task_approved: "Task Approved",
   task_rejected: "Task Rejected",
   task_feedback: "Task Feedback",
+  report_received: "Report Received",
+  report_feedback: "Report Feedback",
+  report_updated: "Report Resubmitted",
 };
 
 export default function Notifications() {

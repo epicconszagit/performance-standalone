@@ -14,6 +14,7 @@ from ..models import (
     Notification,
     PerformanceReport,
     Report,
+    ReportFeedback,
     Task,
     TaskFeedback,
     TodoItem,
@@ -896,6 +897,167 @@ def build_entities_blueprint():
         after_create=after_create_task_feedback,
     )
 
+    def filter_report_feedback(feedbacks, user):
+        if not feedbacks:
+            return []
+        if not user:
+            return []
+        if user.role == "admin":
+            return feedbacks
+
+        report_ids = {f.report_id for f in feedbacks if f.report_id}
+        if not report_ids:
+            return []
+
+        reports = Report.query.filter(Report.id.in_(report_ids)).all()
+        allowed_reports = set(r.id for r in filter_reports_confidentiality(reports, user))
+        return [f for f in feedbacks if f.report_id in allowed_reports]
+
+    def before_create_report_feedback(feedback, user, data=None):
+        if not user:
+            return "Authentication required"
+        if not getattr(feedback, "report_id", None):
+            return "Report ID is required"
+        if not getattr(feedback, "message", None) or not str(feedback.message).strip():
+            return "Message is required"
+
+        report = Report.query.get(feedback.report_id)
+        if not report:
+            return "Report not found"
+
+        allowed = filter_reports_confidentiality([report], user)
+        if not allowed:
+            return "You are not authorized to comment on this report"
+
+        emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
+        base_role = emp.role if emp else ("Administrator" if user.role == "admin" else "Staff Member")
+        sender_id = emp.id if emp else user.id
+        sender_name = emp.full_name if emp else (user.full_name or user.email)
+
+        to_ids = report.submitted_to_ids or []
+        if isinstance(to_ids, str):
+            try:
+                import json
+                to_ids = json.loads(to_ids)
+            except Exception:
+                to_ids = []
+
+        if report.submitted_by_id in (user.id, getattr(emp, "id", None)) or report.created_by_id == user.id:
+            role_tag = f"{base_role} (Author)"
+        elif user.id in to_ids or (emp and emp.id in to_ids):
+            role_tag = f"{base_role} (Recipient)"
+        elif user.role == "admin" or base_role in ("Super Administrator", "Administrator", "Director of Operations"):
+            role_tag = f"{base_role} (Management)"
+        else:
+            role_tag = base_role
+
+        feedback.sender_id = sender_id
+        feedback.sender_name = sender_name
+        feedback.sender_role = role_tag
+        return None
+
+    def after_create_report_feedback(feedback, user, data=None):
+        try:
+            report = Report.query.get(feedback.report_id)
+            if not report:
+                return
+
+            emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
+            sender_emp_id = emp.id if emp else None
+            sender_user_id = user.id
+
+            to_ids = report.submitted_to_ids or []
+            if isinstance(to_ids, str):
+                try:
+                    import json
+                    to_ids = json.loads(to_ids)
+                except Exception:
+                    to_ids = []
+
+            recipients = set()
+            is_author = (report.submitted_by_id in (sender_user_id, sender_emp_id) or report.created_by_id == sender_user_id)
+
+            if is_author:
+                for tid in to_ids:
+                    if tid:
+                        recipients.add(tid)
+            else:
+                if report.submitted_by_id:
+                    recipients.add(report.submitted_by_id)
+                elif report.created_by_id:
+                    recipients.add(report.created_by_id)
+                for tid in to_ids:
+                    if tid:
+                        recipients.add(tid)
+
+            recipients.discard(sender_emp_id)
+            recipients.discard(sender_user_id)
+
+            snippet = feedback.message.strip()
+            if len(snippet) > 80:
+                snippet = snippet[:77] + "..."
+
+            for rec_id in recipients:
+                target_emp = Employee.query.get(rec_id)
+                target_user_id = None
+                target_emp_id = None
+
+                if target_emp:
+                    target_emp_id = target_emp.id
+                    target_user_id = target_emp.user_id
+                    if not target_user_id and target_emp.email:
+                        u = User.query.filter_by(email=target_emp.email).first()
+                        if u:
+                            target_user_id = u.id
+                else:
+                    target_user = User.query.get(rec_id)
+                    if target_user:
+                        target_user_id = target_user.id
+                        te = Employee.query.filter_by(user_id=target_user.id).first()
+                        if te:
+                            target_emp_id = te.id
+
+                if target_user_id or target_emp_id:
+                    notif = Notification(
+                        user_id=target_user_id or target_emp_id,
+                        employee_id=target_emp_id,
+                        title=f"Feedback on Report: {report.heading[:40]}",
+                        message=f"{feedback.sender_name}: \"{snippet}\"",
+                        type="report_feedback",
+                        related_id=report.id,
+                        link=f"/reports?feedback_report_id={report.id}",
+                    )
+                    db.session.add(notif)
+
+            log = AuditLog(
+                action="Sent Report Feedback",
+                entity_type="Report",
+                entity_id=report.id,
+                entity_name=report.heading,
+                performed_by_id=feedback.sender_id,
+                performed_by_name=feedback.sender_name,
+                details=f"Feedback: {snippet}",
+            )
+            db.session.add(log)
+            db.session.commit()
+        except Exception as e:
+            import logging
+            logging.getLogger("api").warning("Failed in after_create_report_feedback: %s", e)
+
+    register_entity(
+        bp,
+        ReportFeedback,
+        "report-feedback",
+        create="any",
+        update="owner_or_admin",
+        delete="owner_or_admin",
+        owner_field="sender_id",
+        list_filter=filter_report_feedback,
+        before_create=before_create_report_feedback,
+        after_create=after_create_report_feedback,
+    )
+
     return bp
+
 
 

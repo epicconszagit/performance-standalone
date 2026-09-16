@@ -328,3 +328,16 @@ class TaskFeedback(BaseModel):
     attachment_file_name = db.Column(db.String(255))
 
 
+class ReportFeedback(BaseModel):
+    __tablename__ = "report_feedback"
+
+    report_id = db.Column(db.String(36), nullable=False)
+    sender_id = db.Column(db.String(36), nullable=False)
+    sender_name = db.Column(db.String(255), nullable=False)
+    sender_role = db.Column(db.String(100), default="Staff Member")
+    message = db.Column(db.Text, nullable=False)
+    attachment_file_url = db.Column(db.String(500))
+    attachment_file_name = db.Column(db.String(255))
+
+
+

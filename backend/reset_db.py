@@ -6,7 +6,8 @@ from app.extensions import db
 from app.models import (
     User, Employee, Department, Task, Meeting,
     MeetingMinutes, Announcement, ActionItem, Report,
-    Notification, AuditLog, PerformanceReport, CompanyBranding
+    Notification, AuditLog, PerformanceReport, CompanyBranding,
+    TaskFeedback, ReportFeedback
 )
 
 def reset_database():
@@ -83,6 +84,8 @@ def reset_database():
         del_audits = db.session.query(AuditLog).delete()
         del_reports = db.session.query(Report).delete()
         del_perf = db.session.query(PerformanceReport).delete()
+        del_task_fb = db.session.query(TaskFeedback).delete()
+        del_report_fb = db.session.query(ReportFeedback).delete()
         del_minutes = db.session.query(MeetingMinutes).delete()
         del_meetings = db.session.query(Meeting).delete()
         del_announcements = db.session.query(Announcement).delete()

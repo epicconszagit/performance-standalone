@@ -33,6 +33,7 @@ export const MeetingMinutes = makeEntity("meeting-minutes");
 export const Notification = makeEntity("notifications");
 export const PerformanceReport = makeEntity("performance-reports");
 export const Report = makeEntity("reports");
+export const ReportFeedback = makeEntity("report-feedback");
 export const Task = makeEntity("tasks");
 export const TaskFeedback = makeEntity("task-feedback");
 export const TodoItem = makeEntity("todo-items");

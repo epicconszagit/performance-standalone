@@ -48,6 +48,9 @@ def create_app(config_class=Config):
             if "task_feedback" not in tables:
                 from .models import TaskFeedback
                 TaskFeedback.__table__.create(db.engine, checkfirst=True)
+            if "report_feedback" not in tables:
+                from .models import ReportFeedback
+                ReportFeedback.__table__.create(db.engine, checkfirst=True)
         except Exception as e:
             app.logger.warning("Database self-healing notice: %s", e)
 

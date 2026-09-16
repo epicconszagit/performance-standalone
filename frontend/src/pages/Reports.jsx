@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
-import { FileText, Plus, X, Download, Trash2, Search, Upload, Lock, Users, ShieldAlert } from "lucide-react";
-import { Report, Employee } from "@/api/entities";
+import { useOutletContext, useSearchParams } from "react-router-dom";
+import { FileText, Plus, X, Download, Trash2, Search, Upload, Lock, Users, ShieldAlert, MessageSquare, RefreshCw, Send } from "lucide-react";
+import { Report, Employee, ReportFeedback } from "@/api/entities";
 import { UploadFile } from "@/api/integrations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,14 +9,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatDate, logAudit, createNotification } from "@/lib/performance";
 import { useToast } from "@/components/ui/use-toast";
+import ReportFeedbackDialog from "@/components/reports/ReportFeedbackDialog";
 
 export default function Reports() {
   const { employee, role, performer, user } = useOutletContext();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [reports, setReports] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingReport, setEditingReport] = useState(null);
+  const [feedbackReport, setFeedbackReport] = useState(null);
+  const [feedbackCounts, setFeedbackCounts] = useState({});
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [recipientSearch, setRecipientSearch] = useState("");
@@ -32,14 +37,37 @@ export default function Reports() {
 
   const isAdmin = ["Super Administrator", "Administrator", "Director of Operations"].includes(role);
 
+  const loadFeedbackCounts = async () => {
+    try {
+      const list = await ReportFeedback.list("-created_date", 1000);
+      const counts = {};
+      (list || []).forEach((f) => {
+        if (f.report_id) {
+          counts[f.report_id] = (counts[f.report_id] || 0) + 1;
+        }
+      });
+      setFeedbackCounts(counts);
+    } catch (e) {
+      // Non-blocking
+    }
+  };
+
   const loadData = async () => {
     try {
-      const [allReports, allEmployees] = await Promise.all([
+      const [allReports, allEmployees, allFeedbacks] = await Promise.all([
         Report.list("-submitted_date", 300),
         Employee.list("-created_date", 300),
+        ReportFeedback.list("-created_date", 1000).catch(() => []),
       ]);
       setReports(allReports || []);
       setEmployees(allEmployees || []);
+      const counts = {};
+      (allFeedbacks || []).forEach((f) => {
+        if (f.report_id) {
+          counts[f.report_id] = (counts[f.report_id] || 0) + 1;
+        }
+      });
+      setFeedbackCounts(counts);
     } catch (e) {
       toast({ title: "Error", description: "Failed to load reports data", variant: "destructive" });
     } finally {
@@ -50,6 +78,17 @@ export default function Reports() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Handle opening feedback directly if redirected via notification (e.g. ?feedback_report_id=XYZ)
+  useEffect(() => {
+    const feedbackReportId = searchParams.get("feedback_report_id") || searchParams.get("report_id");
+    if (feedbackReportId && reports.length > 0) {
+      const target = reports.find((r) => r.id === feedbackReportId);
+      if (target) {
+        setFeedbackReport(target);
+      }
+    }
+  }, [searchParams, reports]);
 
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -76,6 +115,32 @@ export default function Reports() {
     });
   };
 
+  const handleOpenCreate = () => {
+    setEditingReport(null);
+    setForm({
+      heading: "",
+      description: "",
+      file_url: "",
+      file_name: "",
+      is_confidential: false,
+      submitted_to_ids: [],
+    });
+    setShowForm(true);
+  };
+
+  const handleOpenResubmit = (report) => {
+    setEditingReport(report);
+    setForm({
+      heading: report.heading || "",
+      description: report.description || "",
+      file_url: report.file_url || "",
+      file_name: report.file_name || "",
+      is_confidential: !!report.is_confidential,
+      submitted_to_ids: Array.isArray(report.submitted_to_ids) ? [...report.submitted_to_ids] : [],
+    });
+    setShowForm(true);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -93,52 +158,97 @@ export default function Reports() {
         .filter((emp) => form.submitted_to_ids.includes(emp.id))
         .map((emp) => emp.full_name);
 
-      const created = await Report.create({
-        heading: form.heading,
-        description: form.description,
-        submitted_by_id: performer.id,
-        submitted_by_name: performer.name,
-        submitted_date: new Date().toISOString(),
-        department_id: employee?.department_id || "",
-        department_name: employee?.department_name || "",
-        file_url: form.file_url,
-        file_name: form.file_name,
-        is_confidential: form.is_confidential,
-        submitted_to_ids: form.submitted_to_ids,
-        submitted_to_names: selectedNames,
-      });
+      if (editingReport) {
+        // Resubmission / Update existing report
+        await Report.update(editingReport.id, {
+          heading: form.heading,
+          description: form.description,
+          file_url: form.file_url,
+          file_name: form.file_name,
+          is_confidential: form.is_confidential,
+          submitted_to_ids: form.submitted_to_ids,
+          submitted_to_names: selectedNames,
+          submitted_date: new Date().toISOString(),
+        });
 
-      // Send notifications to each chosen recipient
-      for (const recId of form.submitted_to_ids) {
-        const recEmp = employees.find((emp) => emp.id === recId);
-        if (recEmp) {
-          createNotification(
-            recEmp.user_id,
-            recEmp.id,
-            form.is_confidential ? "Confidential Report Submitted to You" : "New Report Submitted to You",
-            `${performer.name} submitted ${form.is_confidential ? "a confidential " : "a "}report: "${form.heading}"`,
-            "report_received",
-            created.id,
-            "/reports"
-          );
+        // Send notifications to each recipient
+        for (const recId of form.submitted_to_ids) {
+          const recEmp = employees.find((emp) => emp.id === recId);
+          if (recEmp) {
+            createNotification(
+              recEmp.user_id,
+              recEmp.id,
+              "Report Resubmitted / Updated",
+              `${performer.name} has resubmitted the report: "${form.heading}"`,
+              "report_updated",
+              editingReport.id,
+              `/reports?feedback_report_id=${editingReport.id}`
+            );
+          }
         }
+
+        await logAudit(
+          "Resubmitted Report",
+          "Report",
+          editingReport.id,
+          form.heading,
+          performer,
+          selectedNames.length > 0 ? `Target recipients: ${selectedNames.join(", ")}` : "General / All Staff"
+        );
+
+        toast({
+          title: "Report Resubmitted",
+          description: "Report revisions and updated attachments have been submitted successfully",
+        });
+      } else {
+        // Create new report
+        const created = await Report.create({
+          heading: form.heading,
+          description: form.description,
+          submitted_by_id: performer.id,
+          submitted_by_name: performer.name,
+          submitted_date: new Date().toISOString(),
+          department_id: employee?.department_id || "",
+          department_name: employee?.department_name || "",
+          file_url: form.file_url,
+          file_name: form.file_name,
+          is_confidential: form.is_confidential,
+          submitted_to_ids: form.submitted_to_ids,
+          submitted_to_names: selectedNames,
+        });
+
+        // Send notifications to each chosen recipient
+        for (const recId of form.submitted_to_ids) {
+          const recEmp = employees.find((emp) => emp.id === recId);
+          if (recEmp) {
+            createNotification(
+              recEmp.user_id,
+              recEmp.id,
+              form.is_confidential ? "Confidential Report Submitted to You" : "New Report Submitted to You",
+              `${performer.name} submitted ${form.is_confidential ? "a confidential " : "a "}report: "${form.heading}"`,
+              "report_received",
+              created.id,
+              `/reports?feedback_report_id=${created.id}`
+            );
+          }
+        }
+
+        await logAudit(
+          form.is_confidential ? "Submitted Confidential Report" : "Submitted Report",
+          "Report",
+          created.id,
+          form.heading,
+          performer,
+          selectedNames.length > 0 ? `Target recipients: ${selectedNames.join(", ")}` : "General / All Staff"
+        );
+
+        toast({
+          title: "Submitted",
+          description: form.is_confidential
+            ? "Confidential report submitted to designated recipients"
+            : "Report submitted successfully",
+        });
       }
-
-      await logAudit(
-        form.is_confidential ? "Submitted Confidential Report" : "Submitted Report",
-        "Report",
-        created.id,
-        form.heading,
-        performer,
-        selectedNames.length > 0 ? `Target recipients: ${selectedNames.join(", ")}` : "General / All Staff"
-      );
-
-      toast({
-        title: "Submitted",
-        description: form.is_confidential
-          ? "Confidential report submitted to designated recipients"
-          : "Report submitted successfully",
-      });
 
       setForm({
         heading: "",
@@ -148,10 +258,11 @@ export default function Reports() {
         is_confidential: false,
         submitted_to_ids: [],
       });
+      setEditingReport(null);
       setShowForm(false);
       loadData();
     } catch (err) {
-      toast({ title: "Error", description: "Failed to submit report", variant: "destructive" });
+      toast({ title: "Error", description: err?.message || "Failed to submit report", variant: "destructive" });
     }
   };
 
@@ -236,7 +347,7 @@ export default function Reports() {
           <p className="text-sm text-slate-500 mt-1">Submit, route, and view organizational reports</p>
         </div>
         <Button
-          onClick={() => setShowForm(true)}
+          onClick={handleOpenCreate}
           className="bg-slate-800 hover:bg-slate-900 shadow-sm"
         >
           <Plus className="w-4 h-4 mr-1.5" /> Submit Report
@@ -320,6 +431,7 @@ export default function Reports() {
           {filtered.map((r) => {
             const isConfidential = !!r.is_confidential;
             const recipientNames = r.submitted_to_names || [];
+            const canManage = isAdmin || r.submitted_by_id === performer.id || (employee && r.submitted_by_id === employee.id);
 
             return (
               <div
@@ -380,20 +492,54 @@ export default function Reports() {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between mt-3 text-xs text-slate-400">
-                    <p>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-2 text-xs border-t border-slate-100/60">
+                    <p className="text-slate-400 text-xs">
                       By <span className="text-slate-600 font-medium">{r.submitted_by_name || "Unknown"}</span> •{" "}
                       {formatDate(r.submitted_date)}
                     </p>
-                    {(isAdmin || r.submitted_by_id === performer.id) && (
+
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      {/* Feedback Button */}
                       <button
-                        onClick={() => handleDelete(r)}
-                        className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors"
-                        title="Delete Report"
+                        type="button"
+                        onClick={() => setFeedbackReport(r)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-700 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 transition-all cursor-pointer shadow-2xs"
+                        title="Discuss or leave feedback on this report"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Feedback</span>
+                        {feedbackCounts[r.id] > 0 && (
+                          <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-blue-600 text-white">
+                            {feedbackCounts[r.id]}
+                          </span>
+                        )}
                       </button>
-                    )}
+
+                      {/* Resubmit Button */}
+                      {canManage && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenResubmit(r)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-all cursor-pointer shadow-2xs"
+                          title="Revise and resubmit this report"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Resubmit</span>
+                        </button>
+                      )}
+
+                      {/* Delete Button */}
+                      {canManage && (
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(r)}
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors"
+                          title="Delete Report"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -402,11 +548,14 @@ export default function Reports() {
         </div>
       )}
 
-      {/* Submit Report Modal */}
+      {/* Submit / Resubmit Report Modal */}
       {showForm && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
-          onClick={() => setShowForm(false)}
+          onClick={() => {
+            setShowForm(false);
+            setEditingReport(null);
+          }}
         >
           <div
             className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[92vh] overflow-y-auto"
@@ -414,16 +563,42 @@ export default function Reports() {
           >
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
               <div>
-                <h2 className="text-xl font-heading font-bold text-slate-900">Submit a Report</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Route reports directly to specific leaders or staff</p>
+                <h2 className="text-xl font-heading font-bold text-slate-900 flex items-center gap-2">
+                  {editingReport ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 text-amber-600" /> Resubmit Report
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-5 h-5 text-slate-700" /> Submit a Report
+                    </>
+                  )}
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {editingReport
+                    ? `Revise details, update document, and resubmit "${editingReport.heading}"`
+                    : "Route reports directly to specific leaders or staff"}
+                </p>
               </div>
               <button
-                onClick={() => setShowForm(false)}
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingReport(null);
+                }}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {editingReport && (
+              <div className="mb-4 bg-amber-50/90 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 flex items-start gap-2.5">
+                <RefreshCw className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <span className="font-semibold text-amber-950">Resubmission Mode:</span> You are revising and resubmitting this report. Your changes, updated description, or new document attachment will update the existing submission and notify designated recipients.
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -551,7 +726,7 @@ export default function Reports() {
               {/* File Attachment */}
               <div>
                 <Label className="text-xs font-semibold text-slate-700">Attachment (optional)</Label>
-                <div className="mt-1 flex items-center gap-3">
+                <div className="mt-1 flex flex-wrap items-center gap-3">
                   <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 hover:text-slate-900 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 shadow-2xs transition-colors">
                     <Upload className="w-3.5 h-3.5 text-slate-500" />
                     <span className="truncate max-w-[240px]">
@@ -570,6 +745,11 @@ export default function Reports() {
                   )}
                   {uploading && <span className="text-xs text-slate-400">Uploading...</span>}
                 </div>
+                {editingReport && form.file_name && (
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Current attachment retained. Click above to attach a different file to replace it.
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-2.5 pt-3 border-t border-slate-100">
@@ -577,20 +757,48 @@ export default function Reports() {
                   type="button"
                   variant="outline"
                   className="flex-1"
-                  onClick={() => setShowForm(false)}
+                  onClick={() => {
+                    setShowForm(false);
+                    setEditingReport(null);
+                  }}
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
-                  className="flex-1 bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
+                  className={`flex-1 text-white shadow-sm font-semibold flex items-center justify-center gap-1.5 ${
+                    editingReport
+                      ? "bg-amber-600 hover:bg-amber-700"
+                      : "bg-slate-900 hover:bg-slate-800"
+                  }`}
                 >
-                  Submit Report
+                  {editingReport ? (
+                    <>
+                      <RefreshCw className="w-4 h-4" /> Resubmit Report
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" /> Submit Report
+                    </>
+                  )}
                 </Button>
               </div>
             </form>
           </div>
         </div>
+      )}
+
+      {/* Report Feedback & Discussion Dialog */}
+      {feedbackReport && (
+        <ReportFeedbackDialog
+          report={feedbackReport}
+          currentUser={user}
+          currentEmployee={employee}
+          onClose={() => {
+            setFeedbackReport(null);
+            loadFeedbackCounts();
+          }}
+        />
       )}
     </div>
   );

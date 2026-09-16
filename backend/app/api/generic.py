@@ -126,11 +126,16 @@ def check_permission(rule, user, obj, owner_field):
         if obj is None:
             return True
         owner_val = getattr(obj, owner_field, None)
-        if owner_val == user.id or str(owner_val) == str(user.id):
+        if owner_val and (owner_val == user.id or str(owner_val) == str(user.id)):
             return True
         from ..models import Employee
         emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
-        if emp and (owner_val == emp.id or str(owner_val) == str(emp.id)):
+        if emp and owner_val and (owner_val == emp.id or str(owner_val) == str(emp.id)):
+            return True
+        sub_val = getattr(obj, "submitted_by_id", None)
+        if sub_val and (sub_val == user.id or str(sub_val) == str(user.id)):
+            return True
+        if emp and sub_val and (sub_val == emp.id or str(sub_val) == str(emp.id)):
             return True
         return False
     return False
