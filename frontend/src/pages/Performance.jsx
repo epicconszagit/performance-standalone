@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { TrendingUp, Award, Users, Building2, Download, FileText, BarChart3 } from "lucide-react";
-import { Task, Employee, Department, PerformanceReport, Notification } from "@/api/entities";
+import { Task, Employee, Department, PerformanceReport, Notification, PerformanceOverview } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import StatCard from "@/components/StatCard";
@@ -18,6 +18,7 @@ export default function Performance() {
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [reports, setReports] = useState([]);
+  const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [period, setPeriod] = useState("Monthly");
@@ -31,11 +32,12 @@ export default function Performance() {
 
   const loadData = async () => {
     try {
-      const [allTasks, emps, depts, reps] = await Promise.all([
-        Task.list("-created_date", 500),
-        Employee.list("-created_date", 300),
-        Department.list("-created_date", 100),
-        PerformanceReport.list("-generated_date", 200),
+      const [allTasks, emps, depts, reps, perfOverview] = await Promise.all([
+        Task.list("-created_date", 500).catch(() => []),
+        Employee.list("-created_date", 300).catch(() => []),
+        Department.list("-created_date", 100).catch(() => []),
+        PerformanceReport.list("-generated_date", 200).catch(() => []),
+        PerformanceOverview.get().catch(() => null),
       ]);
       const validEmps = (emps || []).filter((e) => !isAdministratorRole(e) && e.status === "active");
       const initialScoped = (role === "Department Manager" && employee)
@@ -45,6 +47,7 @@ export default function Performance() {
       setTasks((allTasks || []).filter((t) => !t.deleted));
       setEmployees(emps || []);
       setDepartments(depts || []);
+      setOverview(perfOverview);
       setReports((reps || []).filter((r) => {
         const empMatch = (emps || []).find((e) => e.id === r.employee_id);
         return !empMatch || !isAdministratorRole(empMatch);
@@ -64,36 +67,49 @@ export default function Performance() {
   const empTasks = selectedEmployee
     ? tasks.filter((t) => (t.assigned_to_ids || []).includes(selectedEmployee.id))
     : [];
-  const perf = calculatePerformance(empTasks);
+  const fallbackPerf = calculatePerformance(empTasks);
+  const perf = (selectedEmployee && overview?.employee_perfs?.[selectedEmployee.id])
+    ? overview.employee_perfs[selectedEmployee.id]
+    : fallbackPerf;
 
   const allPerfs = scopedEmployees.map((emp) => {
+    const backendPerf = overview?.employee_perfs?.[emp.id];
+    if (backendPerf) {
+      return { employee: emp, perf: backendPerf };
+    }
     const empTasks = tasks.filter((t) => (t.assigned_to_ids || []).includes(emp.id));
     return { employee: emp, perf: calculatePerformance(empTasks) };
   });
 
-  const topPerformers = [...allPerfs]
-    .filter((p) => p.perf.assigned > 0 || p.perf.score > 0)
-    .sort((a, b) => b.perf.score - a.perf.score)
-    .slice(0, 5);
-  const needsAttention = [...allPerfs]
-    .filter((p) => p.perf.score < 60 && p.perf.assigned > 0)
-    .sort((a, b) => a.perf.score - b.perf.score);
+  const topPerformers = (role === "Department Manager" || !overview?.top_performers)
+    ? [...allPerfs]
+        .filter((p) => p.perf.assigned > 0 || p.perf.score > 0)
+        .sort((a, b) => b.perf.score - a.perf.score)
+        .slice(0, 5)
+    : overview.top_performers;
+  const needsAttention = (role === "Department Manager" || !overview?.needs_attention)
+    ? [...allPerfs]
+        .filter((p) => p.perf.score < 60 && p.perf.assigned > 0)
+        .sort((a, b) => a.perf.score - b.perf.score)
+    : overview.needs_attention;
 
-  const companyPerf = calculatePerformance(tasks);
+  const companyPerf = overview?.company_perf || calculatePerformance(tasks);
 
-  const deptPerfs = departments.map((dept) => {
-    const deptEmps = employees.filter((e) =>
-      (e.department_id === dept.id ||
-       (Array.isArray(e.department_ids) && e.department_ids.includes(dept.id)) ||
-       (dept.manager_id && dept.manager_id === e.id)
-      ) && e.status === "active" && !isAdministratorRole(e)
-    );
-    const deptTasks = tasks.filter((t) =>
-      t.department_id === dept.id ||
-      deptEmps.some((e) => (t.assigned_to_ids || []).includes(e.id))
-    );
-    return { dept, perf: calculatePerformance(deptTasks), empCount: deptEmps.length };
-  }).sort((a, b) => b.perf.score - a.perf.score);
+  const deptPerfs = (overview?.department_rankings && overview.department_rankings.length > 0)
+    ? overview.department_rankings
+    : departments.map((dept) => {
+        const deptEmps = employees.filter((e) =>
+          (e.department_id === dept.id ||
+           (Array.isArray(e.department_ids) && e.department_ids.includes(dept.id)) ||
+           (dept.manager_id && dept.manager_id === e.id)
+          ) && e.status === "active" && !isAdministratorRole(e)
+        );
+        const deptTasks = tasks.filter((t) =>
+          t.department_id === dept.id ||
+          deptEmps.some((e) => (t.assigned_to_ids || []).includes(e.id))
+        );
+        return { dept, perf: calculatePerformance(deptTasks), empCount: deptEmps.length };
+      }).sort((a, b) => b.perf.score - a.perf.score);
 
   const generateReport = async () => {
     if (!selectedEmployee) return;

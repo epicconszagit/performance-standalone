@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { BarChart3, TrendingUp, TrendingDown, Minus, Award, AlertTriangle, Building2, Users, CheckCircle2, Clock, FileText } from "lucide-react";
-import { Task, Employee, Department } from "@/api/entities";
+import { Task, Employee, Department, PerformanceOverview } from "@/api/entities";
 import StatCard from "@/components/StatCard";
 import { calculatePerformance, getClassificationColor, isAdministratorRole } from "@/lib/performance";
 import { useToast } from "@/components/ui/use-toast";
@@ -13,21 +13,24 @@ export default function DirectorDashboard() {
   const [tasks, setTasks] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const [allTasks, emps, depts] = await Promise.all([
-          Task.list("-created_date", 500),
-          Employee.list("-created_date", 300),
-          Department.list("-created_date", 100),
+        const [allTasks, emps, depts, perfOverview] = await Promise.all([
+          Task.list("-created_date", 500).catch(() => []),
+          Employee.list("-created_date", 300).catch(() => []),
+          Department.list("-created_date", 100).catch(() => []),
+          PerformanceOverview.get().catch(() => null),
         ]);
         if (!mounted) return;
         setTasks((allTasks || []).filter((t) => !t.deleted));
         setEmployees(emps || []);
         setDepartments(depts || []);
+        setOverview(perfOverview);
       } catch (e) {
         toast({ title: "Error", description: "Failed to load data", variant: "destructive" });
       } finally {
@@ -41,34 +44,40 @@ export default function DirectorDashboard() {
     return <div className="flex items-center justify-center h-96"><div className="w-8 h-8 border-4 border-amber-400 border-t-transparent rounded-full animate-spin" /></div>;
   }
 
-  const companyPerf = calculatePerformance(tasks);
+  const companyPerf = overview?.company_perf || calculatePerformance(tasks);
   // Exclude administrators who oversee operations and do not receive task assignments
   const activeEmployees = employees.filter((e) => e.status === "active" && !isAdministratorRole(e));
 
   const allPerfs = activeEmployees.map((emp) => {
+    const backendPerf = overview?.employee_perfs?.[emp.id];
+    if (backendPerf) {
+      return { employee: emp, perf: backendPerf };
+    }
     const empTasks = tasks.filter((t) => (t.assigned_to_ids || []).includes(emp.id));
     return { employee: emp, perf: calculatePerformance(empTasks) };
   });
 
-  const avgScore = allPerfs.length > 0 ? Math.round(allPerfs.reduce((s, p) => s + p.perf.score, 0) / allPerfs.length) : 0;
-  const topPerformers = [...allPerfs]
+  const avgScore = overview?.avg_score ?? (allPerfs.length > 0 ? Math.round(allPerfs.reduce((s, p) => s + p.perf.score, 0) / allPerfs.length) : 0);
+  const topPerformers = overview?.top_performers || [...allPerfs]
     .filter((p) => p.perf.assigned > 0 || p.perf.score > 0)
     .sort((a, b) => b.perf.score - a.perf.score)
     .slice(0, 5);
-  const needsAttention = [...allPerfs].filter((p) => p.perf.score < 60 && p.perf.assigned > 0).sort((a, b) => a.perf.score - b.perf.score);
+  const needsAttention = overview?.needs_attention || [...allPerfs].filter((p) => p.perf.score < 60 && p.perf.assigned > 0).sort((a, b) => a.perf.score - b.perf.score);
 
-  const deptPerfs = departments.map((dept) => {
-    const deptEmps = activeEmployees.filter((e) =>
-      e.department_id === dept.id ||
-      (Array.isArray(e.department_ids) && e.department_ids.includes(dept.id)) ||
-      (dept.manager_id && dept.manager_id === e.id)
-    );
-    const deptTasks = tasks.filter((t) =>
-      t.department_id === dept.id ||
-      deptEmps.some((e) => (t.assigned_to_ids || []).includes(e.id))
-    );
-    return { dept, perf: calculatePerformance(deptTasks), empCount: deptEmps.length };
-  }).sort((a, b) => b.perf.score - a.perf.score);
+  const deptPerfs = (overview?.department_rankings && overview.department_rankings.length > 0)
+    ? overview.department_rankings
+    : departments.map((dept) => {
+        const deptEmps = activeEmployees.filter((e) =>
+          e.department_id === dept.id ||
+          (Array.isArray(e.department_ids) && e.department_ids.includes(dept.id)) ||
+          (dept.manager_id && dept.manager_id === e.id)
+        );
+        const deptTasks = tasks.filter((t) =>
+          t.department_id === dept.id ||
+          deptEmps.some((e) => (t.assigned_to_ids || []).includes(e.id))
+        );
+        return { dept, perf: calculatePerformance(deptTasks), empCount: deptEmps.length };
+      }).sort((a, b) => b.perf.score - a.perf.score);
 
   const trend = avgScore >= 70 ? "Improving" : avgScore >= 50 ? "Stable" : "Declining";
   const TrendIcon = trend === "Improving" ? TrendingUp : trend === "Declining" ? TrendingDown : Minus;

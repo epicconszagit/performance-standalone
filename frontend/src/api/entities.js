@@ -37,4 +37,7 @@ export const ReportFeedback = makeEntity("report-feedback");
 export const Task = makeEntity("tasks");
 export const TaskFeedback = makeEntity("task-feedback");
 export const TodoItem = makeEntity("todo-items");
+export const PerformanceOverview = {
+  get: () => apiClient.get("/performance/overview"),
+};
 

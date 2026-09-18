@@ -177,14 +177,18 @@ def register_entity(
                 query = query.order_by(column.desc() if desc else column.asc())
 
         limit = request.args.get("limit", type=int)
-        if limit:
-            query = query.limit(limit)
 
         try:
-            all_objs = query.all()
             if list_filter:
+                all_objs = query.all()
                 user = current_user()
                 all_objs = list_filter(all_objs, user)
+                if limit and limit > 0:
+                    all_objs = all_objs[:limit]
+            else:
+                if limit and limit > 0:
+                    query = query.limit(limit)
+                all_objs = query.all()
 
             return jsonify([obj.to_dict() for obj in all_objs])
         except Exception as e:

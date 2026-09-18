@@ -84,6 +84,9 @@ def create_app(config_class=Config):
     from .api.department_members import department_members_bp
     app.register_blueprint(department_members_bp, url_prefix="/api")
 
+    from .api.performance_overview import performance_overview_bp
+    app.register_blueprint(performance_overview_bp, url_prefix="/api")
+
     from .scheduler import init_scheduler
     init_scheduler(app)
 
