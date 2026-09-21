@@ -107,7 +107,7 @@ class Department(BaseModel):
     # Department Budget & Contribution Fields
     allocated_budget = db.Column(db.Float, default=0.0)
     actual_spend = db.Column(db.Float, default=0.0)
-    budget_currency = db.Column(db.String(10), default="ZAR")
+    budget_currency = db.Column(db.String(10), default="USD")
     fiscal_year = db.Column(db.String(20), default="2026")
     contribution_type = db.Column(db.String(50), default="Operational Support")  # "Operational Support" | "Revenue Generating" | "Strategic Enabler"
     revenue_generated = db.Column(db.Float, default=0.0)

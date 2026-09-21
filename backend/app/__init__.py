@@ -49,7 +49,7 @@ def create_app(config_class=Config):
                 if "actual_spend" not in dept_cols:
                     db.session.execute(text("ALTER TABLE departments ADD COLUMN actual_spend FLOAT DEFAULT 0.0"))
                 if "budget_currency" not in dept_cols:
-                    db.session.execute(text("ALTER TABLE departments ADD COLUMN budget_currency VARCHAR(10) DEFAULT 'ZAR'"))
+                    db.session.execute(text("ALTER TABLE departments ADD COLUMN budget_currency VARCHAR(10) DEFAULT 'USD'"))
                 if "fiscal_year" not in dept_cols:
                     db.session.execute(text("ALTER TABLE departments ADD COLUMN fiscal_year VARCHAR(20) DEFAULT '2026'"))
                 if "contribution_type" not in dept_cols:

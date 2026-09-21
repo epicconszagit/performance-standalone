@@ -39,7 +39,7 @@ export default function Departments() {
     color: COLORS[0],
     allocated_budget: "",
     actual_spend: "",
-    budget_currency: "ZAR",
+    budget_currency: "USD",
     fiscal_year: "2026",
     contribution_type: "Operational Support",
     revenue_generated: "",
@@ -83,7 +83,7 @@ export default function Departments() {
       color: COLORS[0],
       allocated_budget: "",
       actual_spend: "",
-      budget_currency: "ZAR",
+      budget_currency: "USD",
       fiscal_year: "2026",
       contribution_type: "Operational Support",
       revenue_generated: "",
@@ -104,7 +104,7 @@ export default function Departments() {
       color: dept.color || COLORS[0],
       allocated_budget: dept.allocated_budget !== undefined && dept.allocated_budget !== null ? dept.allocated_budget : "",
       actual_spend: dept.actual_spend !== undefined && dept.actual_spend !== null ? dept.actual_spend : "",
-      budget_currency: dept.budget_currency || "ZAR",
+      budget_currency: dept.budget_currency || "USD",
       fiscal_year: dept.fiscal_year || "2026",
       contribution_type: dept.contribution_type || "Operational Support",
       revenue_generated: dept.revenue_generated !== undefined && dept.revenue_generated !== null ? dept.revenue_generated : "",
@@ -137,7 +137,7 @@ export default function Departments() {
       ...(isExecutive ? {
         allocated_budget: form.allocated_budget === "" ? 0 : parseFloat(form.allocated_budget || 0),
         actual_spend: form.actual_spend === "" ? 0 : parseFloat(form.actual_spend || 0),
-        budget_currency: form.budget_currency || "ZAR",
+        budget_currency: form.budget_currency || "USD",
         fiscal_year: form.fiscal_year || "2026",
         contribution_type: form.contribution_type || "Operational Support",
         revenue_generated: form.revenue_generated === "" ? 0 : parseFloat(form.revenue_generated || 0),
@@ -352,7 +352,7 @@ export default function Departments() {
                     <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1.5 text-xs">
                       <div className="flex items-center gap-1.5 text-slate-700 bg-slate-50 border border-slate-200/70 px-2 py-0.5 rounded-md font-medium">
                         <Coins className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                        <span>Budget: {dept.budget_currency || "ZAR"} {Number(dept.allocated_budget || 0).toLocaleString()}</span>
+                        <span>Budget: ${Number(dept.allocated_budget || 0).toLocaleString()}</span>
                       </div>
                       <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
                         {dept.contribution_type || "Operational Support"}
@@ -762,7 +762,7 @@ export default function Departments() {
                           className="pl-7 text-sm font-medium"
                         />
                         <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">
-                          {form.budget_currency === "ZAR" ? "R" : form.budget_currency === "USD" ? "$" : form.budget_currency === "EUR" ? "€" : "£"}
+                          {form.budget_currency === "USD" || !form.budget_currency ? "$" : form.budget_currency === "EUR" ? "€" : form.budget_currency === "GBP" ? "£" : form.budget_currency === "ZAR" ? "R" : "$"}
                         </span>
                       </div>
                     </div>
@@ -779,7 +779,7 @@ export default function Departments() {
                           className="pl-7 text-sm font-medium"
                         />
                         <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">
-                          {form.budget_currency === "ZAR" ? "R" : form.budget_currency === "USD" ? "$" : form.budget_currency === "EUR" ? "€" : "£"}
+                          {form.budget_currency === "USD" || !form.budget_currency ? "$" : form.budget_currency === "EUR" ? "€" : form.budget_currency === "GBP" ? "£" : form.budget_currency === "ZAR" ? "R" : "$"}
                         </span>
                       </div>
                     </div>
@@ -790,10 +790,10 @@ export default function Departments() {
                         <Select value={form.budget_currency} onValueChange={(v) => setForm({ ...form, budget_currency: v })}>
                           <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="ZAR">ZAR (R)</SelectItem>
                             <SelectItem value="USD">USD ($)</SelectItem>
                             <SelectItem value="EUR">EUR (€)</SelectItem>
                             <SelectItem value="GBP">GBP (£)</SelectItem>
+                            <SelectItem value="ZAR">ZAR (R)</SelectItem>
                           </SelectContent>
                         </Select>
                         <Input
@@ -836,7 +836,7 @@ export default function Departments() {
                               className="pl-7 text-sm font-medium"
                             />
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">
-                              {form.budget_currency === "ZAR" ? "R" : form.budget_currency === "USD" ? "$" : form.budget_currency === "EUR" ? "€" : "£"}
+                              {form.budget_currency === "USD" || !form.budget_currency ? "$" : form.budget_currency === "EUR" ? "€" : form.budget_currency === "GBP" ? "£" : form.budget_currency === "ZAR" ? "R" : "$"}
                             </span>
                           </div>
                           <p className="text-[10.5px] text-slate-400 mt-1">Used to compute contribution ROI and profit margins.</p>

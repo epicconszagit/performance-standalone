@@ -40,7 +40,7 @@ export default function DepartmentalPerformance() {
   const [editForm, setEditForm] = useState({
     allocated_budget: "",
     actual_spend: "",
-    budget_currency: "ZAR",
+    budget_currency: "USD",
     fiscal_year: "2026",
     contribution_type: "Operational Support",
     revenue_generated: "",
@@ -91,7 +91,7 @@ export default function DepartmentalPerformance() {
     setEditForm({
       allocated_budget: deptMetric.allocated_budget ?? 0,
       actual_spend: deptMetric.actual_spend ?? 0,
-      budget_currency: deptMetric.budget_currency || "ZAR",
+      budget_currency: deptMetric.budget_currency || "USD",
       fiscal_year: deptMetric.fiscal_year || "2026",
       contribution_type: deptMetric.contribution_type || "Operational Support",
       revenue_generated: deptMetric.revenue_generated ?? 0,
@@ -108,7 +108,7 @@ export default function DepartmentalPerformance() {
       const payload = {
         allocated_budget: parseFloat(editForm.allocated_budget || 0),
         actual_spend: parseFloat(editForm.actual_spend || 0),
-        budget_currency: editForm.budget_currency || "ZAR",
+        budget_currency: editForm.budget_currency || "USD",
         fiscal_year: editForm.fiscal_year || "2026",
         contribution_type: editForm.contribution_type || "Operational Support",
         revenue_generated: parseFloat(editForm.revenue_generated || 0),
@@ -201,15 +201,7 @@ export default function DepartmentalPerformance() {
         <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full -translate-y-1/3 translate-x-1/4 blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-400 bg-amber-400/10 border border-amber-400/30 px-2.5 py-1 rounded-full">
-                <Shield className="w-3.5 h-3.5" /> Executive Portal • Confidential
-              </span>
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-300 bg-indigo-500/10 border border-indigo-400/20 px-2.5 py-1 rounded-full">
-                Super Admin & CEO Only
-              </span>
-            </div>
-            <h1 className="text-2xl lg:text-3xl font-heading font-extrabold text-white mt-2.5 tracking-tight">
+            <h1 className="text-2xl lg:text-3xl font-heading font-extrabold text-white tracking-tight">
               Departmental Performance & Capital Allocation
             </h1>
             <p className="text-slate-300 text-sm max-w-2xl mt-1.5 leading-relaxed">
@@ -252,13 +244,13 @@ export default function DepartmentalPerformance() {
             <div>
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Allocated</p>
               <p className="text-lg lg:text-xl font-bold text-white mt-0.5">
-                R {Number(summary.total_allocated_budget || 0).toLocaleString()}
+                ${Number(summary.total_allocated_budget || 0).toLocaleString()}
               </p>
             </div>
             <div>
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Spend (YTD)</p>
               <p className="text-lg lg:text-xl font-bold text-amber-400 mt-0.5">
-                R {Number(summary.total_actual_spend || 0).toLocaleString()}
+                ${Number(summary.total_actual_spend || 0).toLocaleString()}
               </p>
             </div>
             <div>
@@ -276,7 +268,7 @@ export default function DepartmentalPerformance() {
             <div>
               <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Revenue / Value</p>
               <p className="text-lg lg:text-xl font-bold text-emerald-400 mt-0.5">
-                R {Number(summary.total_revenue_generated || 0).toLocaleString()}
+                ${Number(summary.total_revenue_generated || 0).toLocaleString()}
               </p>
             </div>
             <div>
@@ -342,7 +334,7 @@ export default function DepartmentalPerformance() {
                   {summary.fiscal_risk_dept.dept.name}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Spend: R {Number(summary.fiscal_risk_dept.actual_spend).toLocaleString()} vs Budget: R {Number(summary.fiscal_risk_dept.allocated_budget).toLocaleString()} (Variance: R {Number(summary.fiscal_risk_dept.budget_variance).toLocaleString()})
+                  Spend: ${Number(summary.fiscal_risk_dept.actual_spend).toLocaleString()} vs Budget: ${Number(summary.fiscal_risk_dept.allocated_budget).toLocaleString()} (Variance: ${Number(summary.fiscal_risk_dept.budget_variance).toLocaleString()})
                 </p>
               </div>
             </div>
@@ -495,7 +487,7 @@ export default function DepartmentalPerformance() {
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-500 font-medium">Budget Capital</span>
                     <span className="font-bold text-slate-800">
-                      R {Number(d.actual_spend).toLocaleString()} <span className="text-slate-400 font-normal">/ R {Number(d.allocated_budget).toLocaleString()}</span>
+                      ${Number(d.actual_spend).toLocaleString()} <span className="text-slate-400 font-normal">/ ${Number(d.allocated_budget).toLocaleString()}</span>
                     </span>
                   </div>
 
@@ -518,7 +510,7 @@ export default function DepartmentalPerformance() {
                     <span>Utilization: <strong className="text-slate-700">{d.utilization_rate}%</strong></span>
                     <span>
                       Variance: <strong className={cn(d.budget_variance < 0 ? "text-rose-600" : "text-emerald-600")}>
-                        R {Number(d.budget_variance).toLocaleString()}
+                        ${Number(d.budget_variance).toLocaleString()}
                       </strong>
                     </span>
                   </div>
@@ -541,7 +533,7 @@ export default function DepartmentalPerformance() {
                   <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
                     <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Cost / Output</p>
                     <p className="text-sm font-bold text-slate-800 mt-0.5">
-                      {d.completed_tasks > 0 ? `R ${Math.round(d.cost_per_completed_task).toLocaleString()}` : "—"}
+                      {d.completed_tasks > 0 ? `$${Math.round(d.cost_per_completed_task).toLocaleString()}` : "—"}
                     </p>
                   </div>
                 </div>
@@ -552,7 +544,7 @@ export default function DepartmentalPerformance() {
                     <>
                       <span className="text-slate-500">Revenue Output:</span>
                       <span className="font-bold text-emerald-700">
-                        R {Number(d.revenue_generated || 0).toLocaleString()} (ROI: {d.roi_pct}%)
+                        ${Number(d.revenue_generated || 0).toLocaleString()} (ROI: {d.roi_pct}%)
                       </span>
                     </>
                   ) : d.contribution_type === "Strategic Enabler" ? (
@@ -646,16 +638,16 @@ export default function DepartmentalPerformance() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                     <p className="text-[11px] text-slate-500">Allocated Budget</p>
-                    <p className="text-base font-bold text-slate-900 mt-0.5">R {Number(selectedDept.allocated_budget).toLocaleString()}</p>
+                    <p className="text-base font-bold text-slate-900 mt-0.5">${Number(selectedDept.allocated_budget).toLocaleString()}</p>
                   </div>
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                     <p className="text-[11px] text-slate-500">Actual Spend (YTD)</p>
-                    <p className="text-base font-bold text-slate-900 mt-0.5">R {Number(selectedDept.actual_spend).toLocaleString()}</p>
+                    <p className="text-base font-bold text-slate-900 mt-0.5">${Number(selectedDept.actual_spend).toLocaleString()}</p>
                   </div>
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                     <p className="text-[11px] text-slate-500">Variance</p>
                     <p className={cn("text-base font-bold mt-0.5", selectedDept.budget_variance < 0 ? "text-rose-600" : "text-emerald-600")}>
-                      R {Number(selectedDept.budget_variance).toLocaleString()}
+                      ${Number(selectedDept.budget_variance).toLocaleString()}
                     </p>
                   </div>
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
@@ -700,7 +692,7 @@ export default function DepartmentalPerformance() {
                 </div>
                 <div className="text-right">
                   <p className="text-xl font-black text-amber-950">
-                    {selectedDept.completed_tasks > 0 ? `R ${Math.round(selectedDept.cost_per_completed_task).toLocaleString()}` : "N/A"}
+                    {selectedDept.completed_tasks > 0 ? `$${Math.round(selectedDept.cost_per_completed_task).toLocaleString()}` : "N/A"}
                   </p>
                   <p className="text-[10px] text-amber-800 font-semibold">per completed deliverable</p>
                 </div>
@@ -736,7 +728,7 @@ export default function DepartmentalPerformance() {
             <form onSubmit={handleSaveBudget} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs font-semibold text-slate-700">Allocated Budget</Label>
+                  <Label className="text-xs font-semibold text-slate-700">Allocated Budget ($)</Label>
                   <Input
                     type="number"
                     step="0.01"
@@ -747,7 +739,7 @@ export default function DepartmentalPerformance() {
                   />
                 </div>
                 <div>
-                  <Label className="text-xs font-semibold text-slate-700">Actual Spend (YTD)</Label>
+                  <Label className="text-xs font-semibold text-slate-700">Actual Spend (YTD) ($)</Label>
                   <Input
                     type="number"
                     step="0.01"
@@ -765,8 +757,8 @@ export default function DepartmentalPerformance() {
                   <Select value={editForm.budget_currency} onValueChange={(v) => setEditForm({ ...editForm, budget_currency: v })}>
                     <SelectTrigger className="mt-1 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ZAR">ZAR (R)</SelectItem>
                       <SelectItem value="USD">USD ($)</SelectItem>
+                      <SelectItem value="ZAR">ZAR (R)</SelectItem>
                       <SelectItem value="EUR">EUR (€)</SelectItem>
                       <SelectItem value="GBP">GBP (£)</SelectItem>
                     </SelectContent>

@@ -129,7 +129,7 @@ def get_executive_department_performance():
         # 2. Financial Budget Calculations
         allocated_budget = float(getattr(dept, "allocated_budget", 0.0) or 0.0)
         actual_spend = float(getattr(dept, "actual_spend", 0.0) or 0.0)
-        budget_currency = getattr(dept, "budget_currency", "ZAR") or "ZAR"
+        budget_currency = getattr(dept, "budget_currency", "USD") or "USD"
         fiscal_year = getattr(dept, "fiscal_year", "2026") or "2026"
         budget_variance = round(allocated_budget - actual_spend, 2)
 
@@ -323,7 +323,7 @@ def update_department_budget_and_contribution(dept_id):
             pass
 
     if "budget_currency" in data:
-        dept.budget_currency = (data.get("budget_currency") or "ZAR").strip().upper()
+        dept.budget_currency = (data.get("budget_currency") or "USD").strip().upper()
 
     if "fiscal_year" in data:
         dept.fiscal_year = (data.get("fiscal_year") or "2026").strip()

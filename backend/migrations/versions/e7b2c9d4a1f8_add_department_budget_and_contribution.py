@@ -20,7 +20,7 @@ def upgrade():
     with op.batch_alter_table('departments', schema=None) as batch_op:
         batch_op.add_column(sa.Column('allocated_budget', sa.Float(), nullable=True, server_default='0.0'))
         batch_op.add_column(sa.Column('actual_spend', sa.Float(), nullable=True, server_default='0.0'))
-        batch_op.add_column(sa.Column('budget_currency', sa.String(length=10), nullable=True, server_default='ZAR'))
+        batch_op.add_column(sa.Column('budget_currency', sa.String(length=10), nullable=True, server_default='USD'))
         batch_op.add_column(sa.Column('fiscal_year', sa.String(length=20), nullable=True, server_default='2026'))
         batch_op.add_column(sa.Column('contribution_type', sa.String(length=50), nullable=True, server_default='Operational Support'))
         batch_op.add_column(sa.Column('revenue_generated', sa.Float(), nullable=True, server_default='0.0'))
