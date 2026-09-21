@@ -25,6 +25,7 @@ import MeetingMinutes from './pages/MeetingMinutes';
 import PendingApproval from './pages/PendingApproval';
 import Profile from './pages/Profile';
 import TodoList from './pages/TodoList';
+import DepartmentalPerformance from './pages/DepartmentalPerformance';
 
 
 const AuthenticatedApp = () => {
@@ -65,6 +66,7 @@ const AuthenticatedApp = () => {
           <Route path="/announcements" element={<Announcements />} />
           <Route path="/performance" element={<Performance />} />
           <Route path="/director" element={<DirectorDashboard />} />
+          <Route path="/departmental-performance" element={<DepartmentalPerformance />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/audit" element={<Navigate to="/settings?tab=audit" replace />} />
           <Route path="/settings" element={<Settings />} />

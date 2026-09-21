@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import {
   Building2, Plus, Pencil, Trash2, Users, X, Mail, UserPlus,
-  Search, Check, ShieldCheck, ArrowRightLeft, UserCheck, AlertCircle
+  Search, Check, ShieldCheck, ArrowRightLeft, UserCheck, AlertCircle,
+  DollarSign, Target, Briefcase, Coins, Shield
 } from "lucide-react";
 import { Department, Employee } from "@/api/entities";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { logAudit } from "@/lib/performance";
+import { logAudit, isExecutiveSuperAdminOrCEO } from "@/lib/performance";
 import { useToast } from "@/components/ui/use-toast";
 import { generateDepartmentEmailBase, generateUniqueEmail } from "@/lib/company";
 import { cn } from "@/lib/utils";
@@ -18,16 +19,33 @@ import { cn } from "@/lib/utils";
 const COLORS = ["#1e3a5f", "#0f766e", "#7c2d12", "#581c87", "#92400e", "#991b1b", "#1e40af", "#166534"];
 
 export default function Departments() {
-  const { performer, role } = useOutletContext();
+  const { performer, role, user, employee } = useOutletContext();
   const { toast } = useToast();
   const [departments, setDepartments] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const isExecutive = isExecutiveSuperAdminOrCEO(user, employee, role);
+
   // Department edit/create modal
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ name: "", code: "", email: "", description: "", manager_id: "", color: COLORS[0] });
+  const [form, setForm] = useState({
+    name: "",
+    code: "",
+    email: "",
+    description: "",
+    manager_id: "",
+    color: COLORS[0],
+    allocated_budget: "",
+    actual_spend: "",
+    budget_currency: "ZAR",
+    fiscal_year: "2026",
+    contribution_type: "Operational Support",
+    revenue_generated: "",
+    strategic_weight: 3,
+    target_contribution_score: 85,
+  });
 
   // Manage Department Members modal
   const [managingDept, setManagingDept] = useState(null);
@@ -56,7 +74,22 @@ export default function Departments() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", code: "", email: "", description: "", manager_id: "", color: COLORS[0] });
+    setForm({
+      name: "",
+      code: "",
+      email: "",
+      description: "",
+      manager_id: "",
+      color: COLORS[0],
+      allocated_budget: "",
+      actual_spend: "",
+      budget_currency: "ZAR",
+      fiscal_year: "2026",
+      contribution_type: "Operational Support",
+      revenue_generated: "",
+      strategic_weight: 3,
+      target_contribution_score: 85,
+    });
     setShowForm(true);
   };
 
@@ -68,7 +101,15 @@ export default function Departments() {
       email: dept.email || "",
       description: dept.description || "",
       manager_id: dept.manager_id || "",
-      color: dept.color || COLORS[0]
+      color: dept.color || COLORS[0],
+      allocated_budget: dept.allocated_budget !== undefined && dept.allocated_budget !== null ? dept.allocated_budget : "",
+      actual_spend: dept.actual_spend !== undefined && dept.actual_spend !== null ? dept.actual_spend : "",
+      budget_currency: dept.budget_currency || "ZAR",
+      fiscal_year: dept.fiscal_year || "2026",
+      contribution_type: dept.contribution_type || "Operational Support",
+      revenue_generated: dept.revenue_generated !== undefined && dept.revenue_generated !== null ? dept.revenue_generated : "",
+      strategic_weight: dept.strategic_weight || 3,
+      target_contribution_score: dept.target_contribution_score || 85,
     });
     setShowForm(true);
   };
@@ -93,6 +134,16 @@ export default function Departments() {
       manager_name: manager?.full_name || "",
       color: form.color,
       status: "active",
+      ...(isExecutive ? {
+        allocated_budget: form.allocated_budget === "" ? 0 : parseFloat(form.allocated_budget || 0),
+        actual_spend: form.actual_spend === "" ? 0 : parseFloat(form.actual_spend || 0),
+        budget_currency: form.budget_currency || "ZAR",
+        fiscal_year: form.fiscal_year || "2026",
+        contribution_type: form.contribution_type || "Operational Support",
+        revenue_generated: form.revenue_generated === "" ? 0 : parseFloat(form.revenue_generated || 0),
+        strategic_weight: parseInt(form.strategic_weight || 3),
+        target_contribution_score: form.target_contribution_score === "" ? 85 : parseFloat(form.target_contribution_score || 85),
+      } : {}),
     };
     try {
       if (editing) {
@@ -296,6 +347,18 @@ export default function Departments() {
                     </p>
                   )}
                   <p className="text-sm text-slate-500 mt-2 line-clamp-2">{dept.description || "No description provided."}</p>
+
+                  {isExecutive && (
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1.5 text-xs">
+                      <div className="flex items-center gap-1.5 text-slate-700 bg-slate-50 border border-slate-200/70 px-2 py-0.5 rounded-md font-medium">
+                        <Coins className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>Budget: {dept.budget_currency || "ZAR"} {Number(dept.allocated_budget || 0).toLocaleString()}</span>
+                      </div>
+                      <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                        {dept.contribution_type || "Operational Support"}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
@@ -612,19 +675,26 @@ export default function Departments() {
       {/* Form Dialog for Creating / Editing Department */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-heading font-bold text-slate-900">{editing ? "Edit Department" : "New Department"}</h2>
-              <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+              <div>
+                <h2 className="text-xl font-heading font-bold text-slate-900">{editing ? "Edit Department" : "New Department"}</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Configure operational metadata and structure</p>
+              </div>
+              <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label>Department Name *</Label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="e.g. Operations" />
-              </div>
-              <div>
-                <Label>Department ID / Code</Label>
-                <Input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="e.g. OPS" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label>Department Name *</Label>
+                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="e.g. Operations" />
+                </div>
+                <div>
+                  <Label>Department ID / Code</Label>
+                  <Input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="e.g. OPS" />
+                </div>
               </div>
               <div>
                 <Label>Department Email</Label>
@@ -637,7 +707,7 @@ export default function Departments() {
               </div>
               <div>
                 <Label>Description</Label>
-                <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} />
+                <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
               </div>
               <div>
                 <Label>Department Manager</Label>
@@ -655,14 +725,161 @@ export default function Departments() {
                 <div className="flex flex-wrap gap-2 mt-1">
                   {COLORS.map((c) => (
                     <button key={c} type="button" onClick={() => setForm({ ...form, color: c })}
-                      className={`w-8 h-8 rounded-lg ${form.color === c ? "ring-2 ring-offset-2 ring-slate-800" : ""}`}
+                      className={`w-8 h-8 rounded-lg transition-transform ${form.color === c ? "ring-2 ring-offset-2 ring-slate-800 scale-110" : "hover:scale-105"}`}
                       style={{ backgroundColor: c }} />
                   ))}
                 </div>
               </div>
-              <div className="flex gap-2 pt-2">
+
+              {/* Executive Budget & Strategic Contribution Parameters (Super Admin & CEO Only) */}
+              {isExecutive && (
+                <div className="pt-4 mt-4 border-t-2 border-slate-100 bg-slate-50/70 -mx-6 px-6 py-4 rounded-b-xl space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-md bg-amber-100 flex items-center justify-center text-amber-800">
+                        <Coins className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">Financial Budget & Strategic Contribution</h4>
+                        <p className="text-[11px] text-slate-500">Recorded for executive tracking & contribution indexing</p>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-100 border border-amber-300/60 px-2 py-0.5 rounded-full">
+                      <Shield className="w-3 h-3" /> Super Admin & CEO Only
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <Label className="text-xs text-slate-700">Allocated Budget</Label>
+                      <div className="relative mt-1">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={form.allocated_budget}
+                          onChange={(e) => setForm({ ...form, allocated_budget: e.target.value })}
+                          placeholder="0.00"
+                          className="pl-7 text-sm font-medium"
+                        />
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">
+                          {form.budget_currency === "ZAR" ? "R" : form.budget_currency === "USD" ? "$" : form.budget_currency === "EUR" ? "€" : "£"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className="text-xs text-slate-700">Actual Spend (YTD)</Label>
+                      <div className="relative mt-1">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={form.actual_spend}
+                          onChange={(e) => setForm({ ...form, actual_spend: e.target.value })}
+                          placeholder="0.00"
+                          className="pl-7 text-sm font-medium"
+                        />
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">
+                          {form.budget_currency === "ZAR" ? "R" : form.budget_currency === "USD" ? "$" : form.budget_currency === "EUR" ? "€" : "£"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className="text-xs text-slate-700">Currency & Fiscal Year</Label>
+                      <div className="grid grid-cols-2 gap-1.5 mt-1">
+                        <Select value={form.budget_currency} onValueChange={(v) => setForm({ ...form, budget_currency: v })}>
+                          <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ZAR">ZAR (R)</SelectItem>
+                            <SelectItem value="USD">USD ($)</SelectItem>
+                            <SelectItem value="EUR">EUR (€)</SelectItem>
+                            <SelectItem value="GBP">GBP (£)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          value={form.fiscal_year}
+                          onChange={(e) => setForm({ ...form, fiscal_year: e.target.value })}
+                          placeholder="2026"
+                          className="h-9 text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <Label className="text-xs text-slate-700">Contribution Archetype</Label>
+                      <Select value={form.contribution_type} onValueChange={(v) => setForm({ ...form, contribution_type: v })}>
+                        <SelectTrigger className="mt-1 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Operational Support">Operational Support (Cost/Execution Center)</SelectItem>
+                          <SelectItem value="Revenue Generating">Revenue Generating (Profit/Commercial Center)</SelectItem>
+                          <SelectItem value="Strategic Enabler">Strategic Enabler (Innovation/Infrastructure)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10.5px] text-slate-400 mt-1">
+                        Determines how organizational contribution index (DPCI) is weighted.
+                      </p>
+                    </div>
+
+                    <div>
+                      {form.contribution_type === "Revenue Generating" ? (
+                        <div>
+                          <Label className="text-xs text-slate-700">Revenue Generated (YTD)</Label>
+                          <div className="relative mt-1">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={form.revenue_generated}
+                              onChange={(e) => setForm({ ...form, revenue_generated: e.target.value })}
+                              placeholder="0.00"
+                              className="pl-7 text-sm font-medium"
+                            />
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">
+                              {form.budget_currency === "ZAR" ? "R" : form.budget_currency === "USD" ? "$" : form.budget_currency === "EUR" ? "€" : "£"}
+                            </span>
+                          </div>
+                          <p className="text-[10.5px] text-slate-400 mt-1">Used to compute contribution ROI and profit margins.</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <Label className="text-xs text-slate-700">Strategic Priority Weight (1 to 5)</Label>
+                          <Select value={String(form.strategic_weight)} onValueChange={(v) => setForm({ ...form, strategic_weight: parseInt(v) })}>
+                            <SelectTrigger className="mt-1 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="1">1 - Baseline Support</SelectItem>
+                              <SelectItem value="2">2 - Standard Operations</SelectItem>
+                              <SelectItem value="3">3 - High Strategic Value</SelectItem>
+                              <SelectItem value="4">4 - Mission Critical</SelectItem>
+                              <SelectItem value="5">5 - Enterprise Essential</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-[10.5px] text-slate-400 mt-1">Impact factor applied to departmental task milestones.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs text-slate-700">Target Contribution Benchmark (%)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={form.target_contribution_score}
+                      onChange={(e) => setForm({ ...form, target_contribution_score: e.target.value })}
+                      placeholder="85"
+                      className="mt-1 text-sm font-medium max-w-[140px]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-3 border-t border-slate-200">
                 <Button type="button" variant="outline" className="flex-1" onClick={() => setShowForm(false)}>Cancel</Button>
-                <Button type="submit" className="flex-1 bg-slate-800 hover:bg-slate-900">{editing ? "Update" : "Create"}</Button>
+                <Button type="submit" className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-semibold">
+                  {editing ? "Update Department" : "Create Department"}
+                </Button>
               </div>
             </form>
           </div>

@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { generateEmployeeEmailBase, generateUniqueEmail, EMAIL_DOMAIN } from "@/lib/company";
 
-const ROLES = ["Super Administrator", "Administrator", "Secretary", "Department Manager", "Supervisor", "Staff Member", "Director of Operations"];
+const ROLES = ["Super Administrator", "Chief Executive Officer", "Administrator", "Secretary", "Department Manager", "Supervisor", "Staff Member", "Director of Operations"];
 
 const emptyApproveForm = { full_name: "", phone: "", department_id: "", position: "", role: "Staff Member", hire_date: "" };
 
@@ -22,12 +22,13 @@ export default function Employees() {
   const { performer, user, role } = useOutletContext();
   const { toast } = useToast();
 
-  const isCurrentAdmin = user?.role === "admin" || ["Super Administrator", "Administrator"].includes(role);
+  const isCurrentAdmin = user?.role === "admin" || ["Super Administrator", "Administrator", "Chief Executive Officer"].includes(role);
 
   const isAdminProfile = (emp) => {
     if (!emp) return false;
     return (
       emp.role === "Super Administrator" ||
+      emp.role === "Chief Executive Officer" ||
       emp.role === "Administrator" ||
       (emp.email && emp.email.toLowerCase() === "epiccons.za@gmail.com") ||
       (emp.user_id && emp.user_id === user?.id && user?.role === "admin")
@@ -573,7 +574,7 @@ export default function Employees() {
                   <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {(isCurrentAdmin ? ROLES : ROLES.filter((r) => !["Super Administrator", "Administrator"].includes(r))).map((r) => (
+                      {(isCurrentAdmin ? ROLES : ROLES.filter((r) => !["Super Administrator", "Administrator", "Chief Executive Officer"].includes(r))).map((r) => (
                         <SelectItem key={r} value={r}>{r}</SelectItem>
                       ))}
                     </SelectContent>

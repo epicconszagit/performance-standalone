@@ -104,6 +104,15 @@ class Department(BaseModel):
     manager_name = db.Column(db.String(255))
     status = db.Column(db.String(20), default="active")
     color = db.Column(db.String(20), default="#1e3a5f")
+    # Department Budget & Contribution Fields
+    allocated_budget = db.Column(db.Float, default=0.0)
+    actual_spend = db.Column(db.Float, default=0.0)
+    budget_currency = db.Column(db.String(10), default="ZAR")
+    fiscal_year = db.Column(db.String(20), default="2026")
+    contribution_type = db.Column(db.String(50), default="Operational Support")  # "Operational Support" | "Revenue Generating" | "Strategic Enabler"
+    revenue_generated = db.Column(db.Float, default=0.0)
+    strategic_weight = db.Column(db.Integer, default=3)  # 1 to 5 scale
+    target_contribution_score = db.Column(db.Float, default=85.0)
 
 
 class Task(BaseModel):

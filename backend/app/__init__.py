@@ -42,6 +42,25 @@ def create_app(config_class=Config):
                 if "department_ids" not in emp_cols:
                     db.session.execute(text("ALTER TABLE employees ADD COLUMN department_ids JSON"))
                 db.session.commit()
+            if "departments" in tables:
+                dept_cols = [c["name"] for c in inspector.get_columns("departments")]
+                if "allocated_budget" not in dept_cols:
+                    db.session.execute(text("ALTER TABLE departments ADD COLUMN allocated_budget FLOAT DEFAULT 0.0"))
+                if "actual_spend" not in dept_cols:
+                    db.session.execute(text("ALTER TABLE departments ADD COLUMN actual_spend FLOAT DEFAULT 0.0"))
+                if "budget_currency" not in dept_cols:
+                    db.session.execute(text("ALTER TABLE departments ADD COLUMN budget_currency VARCHAR(10) DEFAULT 'ZAR'"))
+                if "fiscal_year" not in dept_cols:
+                    db.session.execute(text("ALTER TABLE departments ADD COLUMN fiscal_year VARCHAR(20) DEFAULT '2026'"))
+                if "contribution_type" not in dept_cols:
+                    db.session.execute(text("ALTER TABLE departments ADD COLUMN contribution_type VARCHAR(50) DEFAULT 'Operational Support'"))
+                if "revenue_generated" not in dept_cols:
+                    db.session.execute(text("ALTER TABLE departments ADD COLUMN revenue_generated FLOAT DEFAULT 0.0"))
+                if "strategic_weight" not in dept_cols:
+                    db.session.execute(text("ALTER TABLE departments ADD COLUMN strategic_weight INTEGER DEFAULT 3"))
+                if "target_contribution_score" not in dept_cols:
+                    db.session.execute(text("ALTER TABLE departments ADD COLUMN target_contribution_score FLOAT DEFAULT 85.0"))
+                db.session.commit()
             if "todo_items" not in tables:
                 from .models import TodoItem
                 TodoItem.__table__.create(db.engine, checkfirst=True)
@@ -86,6 +105,9 @@ def create_app(config_class=Config):
 
     from .api.performance_overview import performance_overview_bp
     app.register_blueprint(performance_overview_bp, url_prefix="/api")
+
+    from .api.executive_performance import executive_performance_bp
+    app.register_blueprint(executive_performance_bp, url_prefix="/api")
 
     from .scheduler import init_scheduler
     init_scheduler(app)

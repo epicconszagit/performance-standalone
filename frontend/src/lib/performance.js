@@ -244,3 +244,28 @@ export function isTaskRelatedToEmployee(task, employee, employeesList = []) {
 
   return false;
 }
+
+export function isExecutiveSuperAdminOrCEO(user, employee, role) {
+  if (user?.role === "admin") return true;
+  const r = (role || employee?.role || "").trim().toLowerCase();
+  if (
+    r === "super administrator" ||
+    r === "chief executive officer" ||
+    r.includes("super admin") ||
+    r.includes("ceo")
+  ) {
+    return true;
+  }
+  const pos = (employee?.position || "").trim().toLowerCase();
+  if (
+    pos.includes("chief executive officer") ||
+    pos.includes("ceo") ||
+    pos.includes("chief executive") ||
+    pos.includes("managing director")
+  ) {
+    return true;
+  }
+  const email = (user?.email || employee?.email || "").trim().toLowerCase();
+  if (email === "epiccons.za@gmail.com") return true;
+  return false;
+}

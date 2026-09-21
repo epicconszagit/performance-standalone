@@ -40,4 +40,8 @@ export const TodoItem = makeEntity("todo-items");
 export const PerformanceOverview = {
   get: () => apiClient.get("/performance/overview"),
 };
+export const ExecutivePerformance = {
+  getOverview: () => apiClient.get("/executive/department-performance"),
+  updateBudget: (deptId, data) => apiClient.patch(`/executive/departments/${deptId}/budget`, data),
+};
 

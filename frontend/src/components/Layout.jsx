@@ -3,7 +3,7 @@ import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, CheckSquare, CalendarDays,
   Megaphone, TrendingUp, BarChart3, Bell, FileText, Settings as SettingsIcon,
-  LogOut, Menu, X, Shield, ClipboardList, ListTodo
+  LogOut, Menu, X, Shield, ClipboardList, ListTodo, Landmark
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Notification as NotificationEntity, Task } from "@/api/entities";
@@ -11,18 +11,19 @@ import { listPendingUsers } from "@/api/pendingUsers";
 import { useAuth } from "@/lib/AuthContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { Image } from "@/components/ui/image";
+import { isExecutiveSuperAdminOrCEO } from "@/lib/performance";
 
 const UNREAD_POLL_INTERVAL_MS = 20000;
 
 // Mirrors the role groupings used elsewhere (Tasks.jsx, pending_users.py) -
 // who can approve pending accounts vs. who can approve submitted tasks.
-const CAN_APPROVE_ACCOUNTS_ROLES = ["Super Administrator", "Administrator", "Director of Operations"];
-const CAN_APPROVE_TASKS_ROLES = ["Super Administrator", "Administrator", "Director of Operations", "Department Manager"];
+const CAN_APPROVE_ACCOUNTS_ROLES = ["Super Administrator", "Administrator", "Director of Operations", "Chief Executive Officer"];
+const CAN_APPROVE_TASKS_ROLES = ["Super Administrator", "Administrator", "Director of Operations", "Department Manager", "Chief Executive Officer"];
 
 const LOGO_URL = "https://media.base44.com/images/public/6a5df9c009518866564e2bed/28390cb4e_image.png";
 
 const ALL_ROLES = [
-  "Super Administrator", "Administrator", "Secretary", "Department Manager",
+  "Super Administrator", "Chief Executive Officer", "Administrator", "Secretary", "Department Manager",
   "Supervisor", "Staff Member", "Director of Operations"
 ];
 
@@ -30,7 +31,7 @@ const ALL_ROLES = [
 // (Departments/Staff for Directors and Department Managers too, Branding and
 // Audit Log admin-only) - Settings.jsx itself filters which tabs each role
 // actually sees.
-const SETTINGS_ROLES = ["Super Administrator", "Administrator", "Director of Operations", "Department Manager"];
+const SETTINGS_ROLES = ["Super Administrator", "Chief Executive Officer", "Administrator", "Director of Operations", "Department Manager"];
 
 const NAV_ITEMS = [
   { label: "Dashboard", path: "/", icon: LayoutDashboard, roles: ALL_ROLES },
@@ -41,7 +42,8 @@ const NAV_ITEMS = [
   { label: "Announcements", path: "/announcements", icon: Megaphone, roles: ALL_ROLES },
   { label: "Performance", path: "/performance", icon: TrendingUp, roles: ALL_ROLES },
   { label: "Reports", path: "/reports", icon: FileText, roles: ALL_ROLES },
-  { label: "Director Dashboard", path: "/director", icon: BarChart3, roles: ["Director of Operations", "Super Administrator", "Administrator", "Department Manager"] },
+  { label: "Director Dashboard", path: "/director", icon: BarChart3, roles: ["Director of Operations", "Super Administrator", "Administrator", "Department Manager", "Chief Executive Officer"] },
+  { label: "Executive Dept Tracker", path: "/departmental-performance", icon: Landmark, roles: ["Super Administrator", "Chief Executive Officer"] },
   { label: "Notifications", path: "/notifications", icon: Bell, roles: ALL_ROLES },
   { label: "Settings", path: "/settings", icon: SettingsIcon, roles: SETTINGS_ROLES },
 ];
@@ -141,7 +143,13 @@ export default function Layout() {
     return () => { mounted = false; clearInterval(intervalId); };
   }, [user, employee, canApproveAccounts, canApproveTasks]);
 
-  const visibleNav = NAV_ITEMS.filter((item) => item.roles.includes(role));
+  const isExecutive = isExecutiveSuperAdminOrCEO(user, employee, role);
+  const visibleNav = NAV_ITEMS.filter((item) => {
+    if (item.path === "/departmental-performance") {
+      return isExecutive;
+    }
+    return item.roles.includes(role);
+  });
   const NAV_BADGE_COUNTS = {
     "/notifications": unreadCount,
     "/settings": pendingApprovalsCount,
