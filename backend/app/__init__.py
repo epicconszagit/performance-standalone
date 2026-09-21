@@ -44,6 +44,8 @@ def create_app(config_class=Config):
                 db.session.commit()
             if "departments" in tables:
                 dept_cols = [c["name"] for c in inspector.get_columns("departments")]
+                if "annual_budget_target" not in dept_cols:
+                    db.session.execute(text("ALTER TABLE departments ADD COLUMN annual_budget_target FLOAT DEFAULT 0.0"))
                 if "allocated_budget" not in dept_cols:
                     db.session.execute(text("ALTER TABLE departments ADD COLUMN allocated_budget FLOAT DEFAULT 0.0"))
                 if "actual_spend" not in dept_cols:
@@ -70,6 +72,9 @@ def create_app(config_class=Config):
             if "report_feedback" not in tables:
                 from .models import ReportFeedback
                 ReportFeedback.__table__.create(db.engine, checkfirst=True)
+            if "department_financial_records" not in tables:
+                from .models import DepartmentFinancialRecord
+                DepartmentFinancialRecord.__table__.create(db.engine, checkfirst=True)
         except Exception as e:
             app.logger.warning("Database self-healing notice: %s", e)
 

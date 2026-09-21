@@ -105,6 +105,7 @@ class Department(BaseModel):
     status = db.Column(db.String(20), default="active")
     color = db.Column(db.String(20), default="#1e3a5f")
     # Department Budget & Contribution Fields
+    annual_budget_target = db.Column(db.Float, default=0.0)  # Total revenue expected from department by year-end
     allocated_budget = db.Column(db.Float, default=0.0)
     actual_spend = db.Column(db.Float, default=0.0)
     budget_currency = db.Column(db.String(10), default="USD")
@@ -347,6 +348,22 @@ class ReportFeedback(BaseModel):
     message = db.Column(db.Text, nullable=False)
     attachment_file_url = db.Column(db.String(500))
     attachment_file_name = db.Column(db.String(255))
+
+
+class DepartmentFinancialRecord(BaseModel):
+    __tablename__ = "department_financial_records"
+
+    department_id = db.Column(db.String(36), db.ForeignKey("departments.id"), nullable=False)
+    record_type = db.Column(db.String(20), nullable=False)  # "revenue" (money brought in) | "expense" (operating cost)
+    amount = db.Column(db.Float, nullable=False, default=0.0)
+    currency = db.Column(db.String(10), default="USD")
+    title = db.Column(db.String(255), nullable=False)
+    category = db.Column(db.String(100), default="General")
+    transaction_date = db.Column(db.String(50))  # YYYY-MM-DD
+    notes = db.Column(db.Text)
+    recorded_by_id = db.Column(db.String(36))
+    recorded_by_name = db.Column(db.String(255))
+
 
 
 

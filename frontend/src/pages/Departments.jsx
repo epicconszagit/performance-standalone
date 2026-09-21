@@ -102,7 +102,7 @@ export default function Departments() {
       description: dept.description || "",
       manager_id: dept.manager_id || "",
       color: dept.color || COLORS[0],
-      allocated_budget: dept.allocated_budget !== undefined && dept.allocated_budget !== null ? dept.allocated_budget : "",
+      allocated_budget: (dept.annual_budget_target !== undefined && dept.annual_budget_target !== null && dept.annual_budget_target !== "") ? dept.annual_budget_target : (dept.allocated_budget !== undefined && dept.allocated_budget !== null ? dept.allocated_budget : ""),
       actual_spend: dept.actual_spend !== undefined && dept.actual_spend !== null ? dept.actual_spend : "",
       budget_currency: dept.budget_currency || "USD",
       fiscal_year: dept.fiscal_year || "2026",
@@ -135,6 +135,7 @@ export default function Departments() {
       color: form.color,
       status: "active",
       ...(isExecutive ? {
+        annual_budget_target: form.allocated_budget === "" ? 0 : parseFloat(form.allocated_budget || 0),
         allocated_budget: form.allocated_budget === "" ? 0 : parseFloat(form.allocated_budget || 0),
         actual_spend: form.actual_spend === "" ? 0 : parseFloat(form.actual_spend || 0),
         budget_currency: form.budget_currency || "USD",
@@ -352,7 +353,7 @@ export default function Departments() {
                     <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1.5 text-xs">
                       <div className="flex items-center gap-1.5 text-slate-700 bg-slate-50 border border-slate-200/70 px-2 py-0.5 rounded-md font-medium">
                         <Coins className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                        <span>Budget: ${Number(dept.allocated_budget || 0).toLocaleString()}</span>
+                        <span>Target: ${Number(dept.annual_budget_target || dept.allocated_budget || 0).toLocaleString()}</span>
                       </div>
                       <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
                         {dept.contribution_type || "Operational Support"}
@@ -751,7 +752,7 @@ export default function Departments() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <Label className="text-xs text-slate-700">Allocated Budget</Label>
+                      <Label className="text-xs text-slate-700">Annual Revenue Target ($)</Label>
                       <div className="relative mt-1">
                         <Input
                           type="number"

@@ -43,5 +43,9 @@ export const PerformanceOverview = {
 export const ExecutivePerformance = {
   getOverview: () => apiClient.get("/executive/department-performance"),
   updateBudget: (deptId, data) => apiClient.patch(`/executive/departments/${deptId}/budget`, data),
+  updateTarget: (deptId, data) => apiClient.patch(`/executive/departments/${deptId}/target`, data),
+  listFinancialRecords: (params) => apiClient.get("/executive/financial-records", { params }),
+  createFinancialRecord: (data) => apiClient.post("/executive/financial-records", data),
+  deleteFinancialRecord: (recordId) => apiClient.delete(`/executive/financial-records/${recordId}`),
 };
 
