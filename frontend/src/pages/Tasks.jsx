@@ -77,7 +77,8 @@ export default function Tasks() {
 
   const isAdministrator = (emp) => isAdministratorRole(emp);
 
-  const isAssignee = (task) => !!(employee && (task.assigned_to_ids || []).includes(employee.id));
+  const isAssignee = (task) =>
+    !!(task && (task.assigned_to_ids || []).some((id) => (employee && id === employee.id) || (user && id === user.id)));
   const isAssigner = (task) => {
     // An assignee can NEVER approve their own task
     if (isAssignee(task)) return false;

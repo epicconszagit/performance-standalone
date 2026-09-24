@@ -507,11 +507,36 @@ def build_entities_blueprint():
             if admin_employees or admin_users or linked_admin_users:
                 return "Tasks cannot be assigned to Administrators. Administrators oversee operations rather than receiving performance task assignments."
 
-        # 2. Prevent self-approval & ensure only assigner or admin can approve
+        # 2. Ensure only assigned staff members can submit a completion report or transition to Submitted
         new_status = data.get("status") if data else None
+        is_submitting = new_status == "Submitted" or (data and ("completion_report" in data or "completion_report_heading" in data))
+        if is_submitting and task.status != "Submitted":
+            task_assignees = task.assigned_to_ids or []
+            if isinstance(task_assignees, str):
+                try:
+                    import json
+                    task_assignees = json.loads(task_assignees)
+                except Exception:
+                    task_assignees = []
+            is_assignee = bool(
+                user and (
+                    user.id in task_assignees
+                    or (emp and emp.id in task_assignees)
+                )
+            )
+            if not is_assignee:
+                return "Only the assigned staff member can submit a completion report for this task."
+
+        # 3. Prevent self-approval & ensure only assigner or admin can approve
         is_approving = new_status == "Completed" or (data and (data.get("approved_by_id") or data.get("approved_date")))
         if is_approving and task.status != "Completed":
             task_assignees = task.assigned_to_ids or []
+            if isinstance(task_assignees, str):
+                try:
+                    import json
+                    task_assignees = json.loads(task_assignees)
+                except Exception:
+                    task_assignees = []
             if user and (user.id in task_assignees or (emp and emp.id in task_assignees)):
                 return "Assignees cannot approve their own tasks. Only the person who assigned the task or an Administrator can approve."
 
