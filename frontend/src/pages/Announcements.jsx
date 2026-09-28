@@ -1,21 +1,21 @@
 import React, { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { Megaphone, Plus, Pencil, Trash2, X, Upload, Pin, FileText } from "lucide-react";
-import { Announcement } from "@/api/entities";
+import { Announcement, Employee, Notification } from "@/api/entities";
 import { UploadFile } from "@/api/integrations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatDate, logAudit } from "@/lib/performance";
+import { formatDate, logAudit, createNotification } from "@/lib/performance";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
 const CATEGORIES = ["General", "Policy", "Event", "Urgent", "HR"];
 
 export default function Announcements() {
-  const { role, performer } = useOutletContext();
+  const { role, performer, user } = useOutletContext();
   const { toast } = useToast();
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +38,27 @@ export default function Announcements() {
   };
 
   useEffect(() => { loadData(); }, []);
+
+  // Mark announcements seen and clear unread notifications when page is viewed
+  useEffect(() => {
+    if (!user) return;
+    try {
+      localStorage.setItem(`last_seen_announcements_${user.id}`, new Date().toISOString());
+    } catch (e) { }
+
+    (async () => {
+      try {
+        const unread = await Notification.filter({ user_id: user.id, read: false });
+        const annNotifs = (unread || []).filter((n) => n.type === "announcement" || n.link?.startsWith("/announcements"));
+        for (const n of annNotifs) {
+          await Notification.update(n.id, { read: true });
+        }
+        if (annNotifs.length > 0) {
+          window.dispatchEvent(new CustomEvent("notifications-updated"));
+        }
+      } catch (err) { }
+    })();
+  }, [user]);
 
   const openCreate = () => {
     setEditing(null);
@@ -76,7 +97,27 @@ export default function Announcements() {
       } else {
         const created = await Announcement.create(data);
         await logAudit("Created Announcement", "Announcement", created.id, data.title, performer, "");
+
+        // Notify all other employees across the system
+        try {
+          const allEmps = await Employee.list("-created_date", 500);
+          for (const emp of (allEmps || [])) {
+            if (emp.status === "inactive") continue;
+            if (emp.id === performer.id || emp.user_id === user?.id) continue;
+            createNotification(
+              emp.user_id || emp.id,
+              emp.id,
+              "New Announcement Posted",
+              data.title,
+              "announcement",
+              created.id,
+              "/announcements"
+            );
+          }
+        } catch (ne) { }
+
         toast({ title: "Posted", description: "Announcement posted" });
+        window.dispatchEvent(new CustomEvent("notifications-updated"));
       }
       setShowForm(false);
       loadData();

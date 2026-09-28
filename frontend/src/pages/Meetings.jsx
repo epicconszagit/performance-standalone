@@ -5,7 +5,7 @@ import {
   FileText, Upload, Download, ListChecks, ChevronRight, Search, CheckSquare, Square, UserCheck,
   Sun, CalendarRange, Building2, Sparkles, Calendar, Layers
 } from "lucide-react";
-import { Meeting, Employee, MeetingMinutes, ActionItem, Department } from "@/api/entities";
+import { Meeting, Employee, MeetingMinutes, ActionItem, Department, Notification } from "@/api/entities";
 import { apiClient } from "@/api/client";
 import { UploadFile } from "@/api/integrations";
 import { Button } from "@/components/ui/button";
@@ -128,6 +128,30 @@ export default function Meetings() {
     attendee_ids: [],
   });
   const [minutesForm, setMinutesForm] = useState({ content: "", file_url: "", file_name: "", status: "Draft" });
+
+  // Mark meetings seen and clear unread notifications when page is viewed
+  useEffect(() => {
+    if (!user) return;
+    try {
+      localStorage.setItem(`last_seen_meetings_${user.id}`, new Date().toISOString());
+    } catch (e) { }
+
+    (async () => {
+      try {
+        const unread = await Notification.filter({ user_id: user.id, read: false });
+        const meetNotifs = (unread || []).filter((n) =>
+          ["meeting_scheduled", "action_item"].includes(n.type) ||
+          n.link?.startsWith("/meetings")
+        );
+        for (const n of meetNotifs) {
+          await Notification.update(n.id, { read: true });
+        }
+        if (meetNotifs.length > 0) {
+          window.dispatchEvent(new CustomEvent("notifications-updated"));
+        }
+      } catch (err) { }
+    })();
+  }, [user]);
   const [newActionItem, setNewActionItem] = useState({ description: "", assigned_to_id: "", due_date: "" });
   const [uploading, setUploading] = useState(false);
   const [minutesSearch, setMinutesSearch] = useState("");
@@ -470,6 +494,7 @@ export default function Meetings() {
           }
         }
         toast({ title: "Meeting Scheduled", description: `Meeting scheduled with ${names.length} attendee(s).` });
+        window.dispatchEvent(new CustomEvent("notifications-updated"));
       }
 
       setShowForm(false);
@@ -535,6 +560,25 @@ export default function Meetings() {
         const created = await MeetingMinutes.create({ ...data, uploaded_date: new Date().toISOString() });
         await logAudit("Uploaded Minutes", "MeetingMinutes", created.id, meeting.title, performer, "");
       }
+
+      // Notify meeting attendees that minutes were uploaded/updated
+      for (const empId of (meeting.attendee_ids || [])) {
+        if (empId === employee?.id) continue;
+        const emp = employees.find((e) => e.id === empId);
+        if (emp) {
+          createNotification(
+            emp.user_id || empId,
+            empId,
+            "Meeting Minutes Uploaded",
+            `Minutes for "${meeting.title}" have been uploaded`,
+            "minutes_uploaded",
+            meeting.id,
+            "/minutes"
+          );
+        }
+      }
+      window.dispatchEvent(new CustomEvent("notifications-updated"));
+
       toast({ title: "Saved", description: "Meeting minutes saved" });
       loadData();
       setShowDetail(null);
@@ -582,6 +626,7 @@ export default function Meetings() {
       });
       await logAudit("Created Action Item", "ActionItem", created.id, newActionItem.description, performer, `Assigned to ${emp?.full_name}`);
       if (emp) await createNotification(emp.user_id || emp.id, emp.id, "Action Item Assigned", `"${newActionItem.description}" from meeting: ${meeting.title}`, "action_item", created.id, "/meetings");
+      window.dispatchEvent(new CustomEvent("notifications-updated"));
       setNewActionItem({ description: "", assigned_to_id: "", due_date: "" });
       toast({ title: "Added", description: "Action item created" });
       loadData();

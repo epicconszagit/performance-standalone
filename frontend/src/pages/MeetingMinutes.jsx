@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { ClipboardList, Plus, X, Download, Trash2, Search, Upload, CheckCircle2, FileText } from "lucide-react";
-import { MeetingMinutes as MeetingMinutesEntity, Meeting } from "@/api/entities";
+import { MeetingMinutes as MeetingMinutesEntity, Meeting, Employee, Notification } from "@/api/entities";
 import { UploadFile } from "@/api/integrations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatDate, logAudit } from "@/lib/performance";
+import { formatDate, logAudit, createNotification } from "@/lib/performance";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
 export default function MeetingMinutes() {
-  const { employee, role, performer } = useOutletContext();
+  const { employee, role, performer, user } = useOutletContext();
   const { toast } = useToast();
   const [minutes, setMinutes] = useState([]);
   const [meetings, setMeetings] = useState([]);
@@ -43,6 +43,30 @@ export default function MeetingMinutes() {
   };
 
   useEffect(() => { loadData(); }, []);
+
+  // Mark minutes seen and clear unread notifications when page is viewed
+  useEffect(() => {
+    if (!user) return;
+    try {
+      localStorage.setItem(`last_seen_minutes_${user.id}`, new Date().toISOString());
+    } catch (e) { }
+
+    (async () => {
+      try {
+        const unread = await Notification.filter({ user_id: user.id, read: false });
+        const minNotifs = (unread || []).filter((n) =>
+          n.type === "minutes_uploaded" ||
+          n.link?.startsWith("/minutes")
+        );
+        for (const n of minNotifs) {
+          await Notification.update(n.id, { read: true });
+        }
+        if (minNotifs.length > 0) {
+          window.dispatchEvent(new CustomEvent("notifications-updated"));
+        }
+      } catch (err) { }
+    })();
+  }, [user]);
 
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -90,6 +114,22 @@ export default function MeetingMinutes() {
         audit_trail: trail,
       });
       await logAudit("Uploaded Minutes", "MeetingMinutes", created.id, meeting?.title || "", performer, "Document upload");
+
+      // Notify meeting attendees
+      for (const empId of (meeting?.attendee_ids || [])) {
+        if (empId === employee?.id) continue;
+        createNotification(
+          empId,
+          empId,
+          "Meeting Minutes Uploaded",
+          `Minutes for "${meeting?.title || "meeting"}" have been uploaded`,
+          "minutes_uploaded",
+          created.id,
+          "/minutes"
+        );
+      }
+      window.dispatchEvent(new CustomEvent("notifications-updated"));
+
       toast({ title: "Submitted", description: "Meeting minutes uploaded" });
       setForm({ meeting_id: "", content: "", file_url: "", file_name: "", status: "Draft" });
       setShowForm(false);
@@ -114,6 +154,7 @@ export default function MeetingMinutes() {
       });
       await logAudit("Approved Minutes", "MeetingMinutes", mn.id, mn.meeting_title, performer, "");
       toast({ title: "Approved", description: "Minutes approved" });
+      window.dispatchEvent(new CustomEvent("notifications-updated"));
       loadData();
     } catch (e) {
       toast({ title: "Error", description: "Failed to approve minutes", variant: "destructive" });

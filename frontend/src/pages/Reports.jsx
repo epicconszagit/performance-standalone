@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
 import { FileText, Plus, X, Download, Trash2, Search, Upload, Lock, Users, ShieldAlert, MessageSquare, RefreshCw, Send } from "lucide-react";
-import { Report, Employee, ReportFeedback } from "@/api/entities";
+import { Report, Employee, ReportFeedback, Notification } from "@/api/entities";
 import { UploadFile } from "@/api/integrations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,6 +78,30 @@ export default function Reports() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Mark reports seen and clear unread notifications when page is viewed
+  useEffect(() => {
+    if (!user) return;
+    try {
+      localStorage.setItem(`last_seen_reports_${user.id}`, new Date().toISOString());
+    } catch (e) { }
+
+    (async () => {
+      try {
+        const unread = await Notification.filter({ user_id: user.id, read: false });
+        const repNotifs = (unread || []).filter((n) =>
+          ["report_received", "report_updated", "report_feedback"].includes(n.type) ||
+          n.link?.startsWith("/reports")
+        );
+        for (const n of repNotifs) {
+          await Notification.update(n.id, { read: true });
+        }
+        if (repNotifs.length > 0) {
+          window.dispatchEvent(new CustomEvent("notifications-updated"));
+        }
+      } catch (err) { }
+    })();
+  }, [user]);
 
   // Handle opening feedback directly if redirected via notification (e.g. ?feedback_report_id=XYZ)
   useEffect(() => {
@@ -200,6 +224,7 @@ export default function Reports() {
           title: "Report Resubmitted",
           description: "Report revisions and updated attachments have been submitted successfully",
         });
+        window.dispatchEvent(new CustomEvent("notifications-updated"));
       } else {
         // Create new report
         const created = await Report.create({
@@ -233,6 +258,28 @@ export default function Reports() {
           }
         }
 
+        // If general/department report with no specific recipients, notify executives, admins, and department
+        if (form.submitted_to_ids.length === 0) {
+          for (const emp of employees) {
+            if (emp.id === performer.id || emp.user_id === user?.id || emp.status === "inactive") continue;
+            const isLeadership = ["Super Administrator", "Administrator", "Director of Operations", "Chief Executive Officer"].includes(emp.role) ||
+              (emp.position || "").toLowerCase().includes("chief executive officer") ||
+              (emp.email || "").toLowerCase() === "cmutovhe@epicnetworkgroup.com";
+            const isSameDept = employee?.department_id && emp.department_id === employee.department_id;
+            if (isLeadership || isSameDept) {
+              createNotification(
+                emp.user_id || emp.id,
+                emp.id,
+                "New Report Posted",
+                `${performer.name} submitted a report: "${form.heading}"`,
+                "report_received",
+                created.id,
+                `/reports?feedback_report_id=${created.id}`
+              );
+            }
+          }
+        }
+
         await logAudit(
           form.is_confidential ? "Submitted Confidential Report" : "Submitted Report",
           "Report",
@@ -248,6 +295,7 @@ export default function Reports() {
             ? "Confidential report submitted to designated recipients"
             : "Report submitted successfully",
         });
+        window.dispatchEvent(new CustomEvent("notifications-updated"));
       }
 
       setForm({

@@ -681,12 +681,21 @@ def build_entities_blueprint():
     def filter_todo_items(todos, user):
         if not user:
             return []
-        if user.role in ("admin", "Super Administrator", "Director of Operations"):
+        if user.role in ("admin", "Super Administrator", "Director of Operations", "Chief Executive Officer"):
             return todos
 
         emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
-        emp_role = emp.role if emp else user.role
-        if emp_role in ("Super Administrator", "Director of Operations"):
+        emp_role = (emp.role if emp else user.role or "").strip()
+        emp_pos = (emp.position or "").strip().lower() if emp else ""
+        emp_email = (user.email or (emp.email if emp else "")).strip().lower()
+
+        is_exec = (
+            user.role in ("admin", "Super Administrator", "Director of Operations", "Chief Executive Officer")
+            or emp_role in ("Super Administrator", "Director of Operations", "Chief Executive Officer")
+            or any(term in emp_pos for term in ("chief executive officer", "ceo", "chief executive", "managing director"))
+            or emp_email in ("cmutovhe@epicnetworkgroup.com", "epiccons.za@gmail.com")
+        )
+        if is_exec:
             return todos
 
         if emp_role == "Department Manager" and emp and emp.department_id:

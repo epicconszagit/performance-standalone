@@ -16,7 +16,7 @@ import { ReportFeedback } from "@/api/entities";
 import { UploadFile } from "@/api/integrations";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDate, formatDateTime } from "@/lib/performance";
+import { formatDate, formatDateTime, createNotification } from "@/lib/performance";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -104,6 +104,37 @@ export default function ReportFeedbackDialog({ report, currentUser, currentEmplo
       setAttachmentUrl("");
       setAttachmentName("");
       setMessages((prev) => [...prev, newMsg]);
+
+      // Notify the report submitter if someone else commented
+      const senderName = currentEmployee?.full_name || currentUser?.full_name || "Someone";
+      if (report.submitted_by_id && report.submitted_by_id !== myId && report.submitted_by_id !== currentUser?.id) {
+        createNotification(
+          report.submitted_by_id,
+          report.submitted_by_id,
+          "New Feedback on Your Report",
+          `${senderName} commented on your report: "${report.heading}"`,
+          "report_feedback",
+          report.id,
+          `/reports?feedback_report_id=${report.id}`
+        );
+      }
+      // If the submitter commented, notify designated recipients
+      if (myId === report.submitted_by_id || currentUser?.id === report.submitted_by_id) {
+        for (const recId of (report.submitted_to_ids || [])) {
+          if (recId === myId) continue;
+          createNotification(
+            recId,
+            recId,
+            "New Response on Report",
+            `${senderName} replied on report: "${report.heading}"`,
+            "report_feedback",
+            report.id,
+            `/reports?feedback_report_id=${report.id}`
+          );
+        }
+      }
+      window.dispatchEvent(new CustomEvent("notifications-updated"));
+
       toast({ title: "Sent", description: "Feedback / message posted" });
     } catch (err) {
       toast({

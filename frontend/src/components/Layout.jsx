@@ -6,7 +6,14 @@ import {
   LogOut, Menu, X, Shield, ClipboardList, ListTodo, Landmark
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Notification as NotificationEntity, Task } from "@/api/entities";
+import {
+  Notification as NotificationEntity,
+  Task,
+  Announcement,
+  Report,
+  Meeting,
+  MeetingMinutes as MeetingMinutesEntity
+} from "@/api/entities";
 import { listPendingUsers } from "@/api/pendingUsers";
 import { useAuth } from "@/lib/AuthContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -72,6 +79,10 @@ export default function Layout() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
   const [tasksAttentionCount, setTasksAttentionCount] = useState(0);
+  const [reportsAttentionCount, setReportsAttentionCount] = useState(0);
+  const [announcementsAttentionCount, setAnnouncementsAttentionCount] = useState(0);
+  const [meetingsAttentionCount, setMeetingsAttentionCount] = useState(0);
+  const [minutesAttentionCount, setMinutesAttentionCount] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -83,6 +94,26 @@ export default function Layout() {
     setUserMenuOpen(false);
   }, [location.pathname]);
 
+  // Reset or clear badge when viewing that section
+  useEffect(() => {
+    if (!user) return;
+    const path = location.pathname;
+    const nowStr = new Date().toISOString();
+    if (path === "/announcements") {
+      try { localStorage.setItem(`last_seen_announcements_${user.id}`, nowStr); } catch (e) { }
+      setAnnouncementsAttentionCount(0);
+    } else if (path === "/reports") {
+      try { localStorage.setItem(`last_seen_reports_${user.id}`, nowStr); } catch (e) { }
+      setReportsAttentionCount(0);
+    } else if (path === "/meetings") {
+      try { localStorage.setItem(`last_seen_meetings_${user.id}`, nowStr); } catch (e) { }
+      setMeetingsAttentionCount(0);
+    } else if (path === "/minutes") {
+      try { localStorage.setItem(`last_seen_minutes_${user.id}`, nowStr); } catch (e) { }
+      setMinutesAttentionCount(0);
+    }
+  }, [location.pathname, user]);
+
   useEffect(() => {
     if (!user) return;
     if ("Notification" in window && Notification.permission === "default") {
@@ -90,11 +121,16 @@ export default function Layout() {
     }
     let mounted = true;
     let previousCount = null;
-    const refreshUnread = async () => {
+
+    const refreshAllCounts = async () => {
+      if (!user || !mounted) return;
+
+      // 1. Fetch unread notifications for current user
+      let notifs = [];
       try {
-        const notifs = await NotificationEntity.filter({ user_id: user.id, read: false });
+        notifs = await NotificationEntity.filter({ user_id: user.id, read: false }) || [];
         if (!mounted) return;
-        const count = notifs?.length || 0;
+        const count = notifs.length;
         if (previousCount !== null && count > previousCount && "Notification" in window && Notification.permission === "granted") {
           const latest = notifs[0] || {};
           try {
@@ -105,43 +141,147 @@ export default function Layout() {
         previousCount = count;
         setUnreadCount(count);
       } catch (e) { }
-    };
-    refreshUnread();
-    const intervalId = setInterval(refreshUnread, UNREAD_POLL_INTERVAL_MS);
-    return () => { mounted = false; clearInterval(intervalId); };
-  }, [user]);
 
-  // Section-specific "needs attention" badges, same polling pattern as
-  // notifications - pending account approvals (admins only) and tasks
-  // either awaiting the viewer's approval or not yet seen by them.
-  useEffect(() => {
-    if (!user) return;
-    let mounted = true;
-    const refreshAttentionCounts = async () => {
+      // 2. Pending account approvals (admins only)
       if (canApproveAccounts) {
         try {
           const pending = await listPendingUsers();
           if (mounted) setPendingApprovalsCount(pending?.length || 0);
         } catch (e) { }
       }
+
+      // 3. Tasks attention count
+      let taskAttention = 0;
       try {
         const tasks = await Task.list("-created_date", 300);
-        if (!mounted) return;
-        if (canApproveTasks) {
-          setTasksAttentionCount((tasks || []).filter((t) => !t.archived && !t.deleted && t.status === "Submitted").length);
-        } else if (employee) {
-          setTasksAttentionCount(
-            (tasks || []).filter(
+        if (mounted) {
+          if (canApproveTasks) {
+            taskAttention = (tasks || []).filter((t) => !t.archived && !t.deleted && t.status === "Submitted").length;
+          } else if (employee) {
+            taskAttention = (tasks || []).filter(
               (t) => !t.archived && !t.deleted && (t.assigned_to_ids || []).includes(employee.id) && !(t.seen_by_ids || []).includes(employee.id)
-            ).length
-          );
+            ).length;
+          }
+          const unreadTaskNotifs = notifs.filter(n =>
+            (n.type && n.type.startsWith("task_")) ||
+            n.type === "deadline_approaching" ||
+            n.link?.startsWith("/tasks")
+          ).length;
+          setTasksAttentionCount(Math.max(taskAttention, unreadTaskNotifs));
+        }
+      } catch (e) { }
+
+      // 4. Announcements attention count
+      try {
+        const unreadAnnNotifs = notifs.filter(n => n.type === "announcement" || n.link?.startsWith("/announcements")).length;
+        let unseenAnns = 0;
+        const lastSeenAnnStr = localStorage.getItem(`last_seen_announcements_${user.id}`);
+        if (lastSeenAnnStr) {
+          const lastSeenAnn = new Date(lastSeenAnnStr).getTime();
+          const anns = await Announcement.list("-created_date", 25) || [];
+          unseenAnns = anns.filter(a => {
+            if (a.active === false) return false;
+            if (a.created_by_id === user.id || a.created_by_id === employee?.id) return false;
+            return new Date(a.created_date).getTime() > lastSeenAnn;
+          }).length;
+        }
+        if (mounted) {
+          setAnnouncementsAttentionCount(Math.max(unreadAnnNotifs, unseenAnns));
+        }
+      } catch (e) { }
+
+      // 5. Reports attention count
+      try {
+        const unreadRepNotifs = notifs.filter(n =>
+          ["report_received", "report_updated", "report_feedback"].includes(n.type) ||
+          n.link?.startsWith("/reports")
+        ).length;
+        let unseenReps = 0;
+        const lastSeenRepStr = localStorage.getItem(`last_seen_reports_${user.id}`);
+        if (lastSeenRepStr) {
+          const lastSeenRep = new Date(lastSeenRepStr).getTime();
+          const reps = await Report.list("-submitted_date", 30) || [];
+          const myId = employee?.id || user.id;
+          const isLeadership = ["Super Administrator", "Administrator", "Director of Operations", "Chief Executive Officer"].includes(role) ||
+            (employee?.position || "").toLowerCase().includes("chief executive officer") ||
+            (user.email || "").toLowerCase() === "cmutovhe@epicnetworkgroup.com";
+
+          unseenReps = reps.filter(r => {
+            if (r.submitted_by_id === myId || r.created_by_id === user.id) return false;
+            const rTime = new Date(r.submitted_date || r.created_date).getTime();
+            if (rTime <= lastSeenRep) return false;
+            const toIds = r.submitted_to_ids || [];
+            if (toIds.includes(myId)) return true;
+            if (!r.is_confidential && (isLeadership || (r.department_id && r.department_id === employee?.department_id))) return true;
+            return false;
+          }).length;
+        }
+        if (mounted) {
+          setReportsAttentionCount(Math.max(unreadRepNotifs, unseenReps));
+        }
+      } catch (e) { }
+
+      // 6. Meetings attention count
+      try {
+        const unreadMeetNotifs = notifs.filter(n =>
+          ["meeting_scheduled", "action_item"].includes(n.type) ||
+          n.link?.startsWith("/meetings")
+        ).length;
+        let unseenMeets = 0;
+        const lastSeenMeetStr = localStorage.getItem(`last_seen_meetings_${user.id}`);
+        if (lastSeenMeetStr) {
+          const lastSeenMeet = new Date(lastSeenMeetStr).getTime();
+          const meets = await Meeting.list("-created_date", 25) || [];
+          const myId = employee?.id || user.id;
+          unseenMeets = meets.filter(m => {
+            if (m.created_by_id === user.id || m.created_by_id === myId) return false;
+            if (new Date(m.created_date).getTime() <= lastSeenMeet) return false;
+            const attIds = m.attendee_ids || [];
+            return attIds.length === 0 || attIds.includes(myId);
+          }).length;
+        }
+        if (mounted) {
+          setMeetingsAttentionCount(Math.max(unreadMeetNotifs, unseenMeets));
+        }
+      } catch (e) { }
+
+      // 7. Minutes attention count
+      try {
+        const unreadMinNotifs = notifs.filter(n =>
+          n.type === "minutes_uploaded" ||
+          n.link?.startsWith("/minutes")
+        ).length;
+        let unseenMins = 0;
+        const lastSeenMinStr = localStorage.getItem(`last_seen_minutes_${user.id}`);
+        if (lastSeenMinStr) {
+          const lastSeenMin = new Date(lastSeenMinStr).getTime();
+          const mins = await MeetingMinutesEntity.list("-uploaded_date", 20) || [];
+          const myId = employee?.id || user.id;
+          unseenMins = mins.filter(m => {
+            if (m.uploaded_by_id === myId || m.created_by_id === user.id) return false;
+            return new Date(m.uploaded_date || m.created_date).getTime() > lastSeenMin;
+          }).length;
+        }
+        if (mounted) {
+          setMinutesAttentionCount(Math.max(unreadMinNotifs, unseenMins));
         }
       } catch (e) { }
     };
-    refreshAttentionCounts();
-    const intervalId = setInterval(refreshAttentionCounts, UNREAD_POLL_INTERVAL_MS);
-    return () => { mounted = false; clearInterval(intervalId); };
-  }, [user, employee, canApproveAccounts, canApproveTasks]);
+
+    refreshAllCounts();
+    const intervalId = setInterval(refreshAllCounts, UNREAD_POLL_INTERVAL_MS);
+
+    // Listen for custom notification update events and window focus
+    window.addEventListener("notifications-updated", refreshAllCounts);
+    window.addEventListener("focus", refreshAllCounts);
+
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+      window.removeEventListener("notifications-updated", refreshAllCounts);
+      window.removeEventListener("focus", refreshAllCounts);
+    };
+  }, [user, employee, canApproveAccounts, canApproveTasks, role]);
 
   const isExecutive = isExecutiveSuperAdminOrCEO(user, employee, role);
   const visibleNav = NAV_ITEMS.filter((item) => {
@@ -151,9 +291,13 @@ export default function Layout() {
     return item.roles.includes(role);
   });
   const NAV_BADGE_COUNTS = {
-    "/notifications": unreadCount,
+    "/notifications": location.pathname === "/notifications" ? 0 : unreadCount,
     "/settings": pendingApprovalsCount,
     "/tasks": tasksAttentionCount,
+    "/reports": location.pathname === "/reports" ? 0 : reportsAttentionCount,
+    "/announcements": location.pathname === "/announcements" ? 0 : announcementsAttentionCount,
+    "/meetings": location.pathname === "/meetings" ? 0 : meetingsAttentionCount,
+    "/minutes": location.pathname === "/minutes" ? 0 : minutesAttentionCount,
   };
 
   const handleLogout = () => {
@@ -209,7 +353,9 @@ export default function Layout() {
                 <Icon className="w-[18px] h-[18px] shrink-0" />
                 <span className="flex-1">{item.label}</span>
                 {badgeCount > 0 && (
-                  <span className="bg-amber-500 text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{badgeCount}</span>
+                  <span className="bg-amber-500 text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] inline-flex items-center justify-center leading-none shadow-xs">
+                    {badgeCount}
+                  </span>
                 )}
               </NavLink>
             );

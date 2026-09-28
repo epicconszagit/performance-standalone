@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PriorityBadge } from "@/components/Badges";
-import { formatDateTime, formatDate } from "@/lib/performance";
+import { formatDateTime, formatDate, isExecutiveSuperAdminOrCEO } from "@/lib/performance";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -21,13 +21,17 @@ export default function TodoList() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const isExecutive = isExecutiveSuperAdminOrCEO(user, employee, role) ||
+    employee?.email === "cmutovhe@epicnetworkgroup.com" ||
+    user?.email === "cmutovhe@epicnetworkgroup.com";
+
   const [todos, setTodos] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Tabs: "my" vs "team"
-  const canViewTeam = ["Super Administrator", "Administrator", "Director of Operations", "Department Manager"].includes(role);
+  const canViewTeam = ["Super Administrator", "Administrator", "Director of Operations", "Department Manager", "Chief Executive Officer"].includes(role) || isExecutive;
   const [activeTab, setActiveTab] = useState("my");
 
   // Team view filters
@@ -70,8 +74,9 @@ export default function TodoList() {
     loadData();
   }, []);
 
-  // Filter employees for department manager
-  const scopedEmployees = (role === "Department Manager" && employee)
+  // Filter employees for department manager vs executive
+  const isDeptManagerOnly = role === "Department Manager" && !isExecutive;
+  const scopedEmployees = (isDeptManagerOnly && employee)
     ? employees.filter((e) => e.department_id === employee.department_id)
     : employees;
 
@@ -192,6 +197,7 @@ export default function TodoList() {
 
   // Filter items for "Team Members' To-Dos"
   const teamTodos = todos.filter((t) => {
+    if (isDeptManagerOnly && employee?.department_id && t.department_id !== employee.department_id) return false;
     if (selectedDeptId !== "all" && t.department_id !== selectedDeptId) return false;
     if (selectedEmpId !== "all" && t.employee_id !== selectedEmpId) return false;
     return true;
@@ -341,7 +347,7 @@ export default function TodoList() {
       {/* Team Filter Bar (If in Team tab) */}
       {activeTab === "team" && (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-wrap items-center gap-4">
-          {role !== "Department Manager" && (
+          {!isDeptManagerOnly && (
             <div className="w-48">
               <Label className="text-xs text-slate-500">Department</Label>
               <Select value={selectedDeptId} onValueChange={(val) => { setSelectedDeptId(val); setSelectedEmpId("all"); }}>
