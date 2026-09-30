@@ -164,7 +164,7 @@ export async function createNotification(userId, employeeId, title, message, typ
 
 export function formatDate(dateStr) {
   if (!dateStr) return "—";
-  const d = new Date(dateStr);
+  const d = new Date(typeof dateStr === "string" && !dateStr.includes("T") ? `${dateStr}T12:00:00` : dateStr);
   return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 

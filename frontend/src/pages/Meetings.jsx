@@ -50,14 +50,15 @@ function parseMonthValue(val) {
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 
-function getMonthWeekdays(year, month) {
+// Filter exclusively for Monday (1), Wednesday (3), and Friday (5)
+function getMonthMWFDays(year, month) {
   const dates = [];
   const todayStr = getTodayString();
   const daysInMonth = new Date(year, month, 0).getDate();
   for (let day = 1; day <= daysInMonth; day++) {
     const d = new Date(year, month - 1, day);
-    const dow = d.getDay(); // 0 = Sun, 6 = Sat
-    if (dow !== 0 && dow !== 6) {
+    const dow = d.getDay(); // 0 = Sun, 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri, 6 = Sat
+    if (dow === 1 || dow === 3 || dow === 5) {
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, "0");
       const dt = String(d.getDate()).padStart(2, "0");
@@ -69,6 +70,18 @@ function getMonthWeekdays(year, month) {
     }
   }
   return dates;
+}
+
+function formatMeetingDate(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(typeof dateStr === "string" && !dateStr.includes("T") ? `${dateStr}T12:00:00` : dateStr);
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+}
+
+function getMeetingDayName(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(typeof dateStr === "string" && !dateStr.includes("T") ? `${dateStr}T12:00:00` : dateStr);
+  return d.toLocaleDateString("en-US", { weekday: "long" });
 }
 
 function getMonthWeeklyDays(year, month, targetDayOfWeek = 5) {
@@ -213,10 +226,10 @@ export default function Meetings() {
     let agenda = "";
 
     if (defaultMode === "daily_morning") {
-      title = `Daily Morning Standup - ${monthLabel}`;
+      title = `Regular Standup (Mon, Wed, Fri) - ${monthLabel}`;
       time = "08:30";
       venue = "Main Boardroom / Virtual Standup";
-      agenda = "Daily task alignment, priorities check, and blocker identification.";
+      agenda = "Task progress review, deliverables alignment, blockers and priorities check for the week.";
     } else if (defaultMode === "weekly_update") {
       title = "Weekly Performance & Project Update";
       time = "15:00";
@@ -253,10 +266,10 @@ export default function Meetings() {
     if (newMode === "daily_morning") {
       setForm((prev) => ({
         ...prev,
-        title: `Daily Morning Standup - ${monthLabel}`,
+        title: `Regular Standup (Mon, Wed, Fri) - ${monthLabel}`,
         time: prev.time && prev.time !== "10:00" ? prev.time : "08:30",
         venue: prev.venue || "Main Boardroom / Virtual Standup",
-        agenda: "Daily task alignment, priorities check, and blocker identification.",
+        agenda: "Task progress review, deliverables alignment, blockers and priorities check for the week.",
       }));
     } else if (newMode === "weekly_update") {
       setForm((prev) => ({
@@ -379,40 +392,43 @@ export default function Meetings() {
         const { year, month } = parseMonthValue(targetMonth);
         const monthObj = getMonthOptions().find((o) => o.value === targetMonth);
         const monthLabel = monthObj ? monthObj.label : "";
-        const weekdays = getMonthWeekdays(year, month);
+        const weekdays = getMonthMWFDays(year, month);
         if (weekdays.length === 0) {
           toast({
-            title: "No Upcoming Weekdays",
-            description: `All weekdays in ${monthLabel} have already passed. Please select an upcoming month.`,
+            title: "No Upcoming Sessions",
+            description: `All Monday, Wednesday, and Friday sessions in ${monthLabel} have already passed. Please select an upcoming month.`,
             variant: "destructive",
           });
           setSubmittingMeeting(false);
           return;
         }
 
-        const meetingsList = weekdays.map((dateStr) => ({
-          title: form.title || `Daily Morning Standup (${formatDate(dateStr)})`,
-          date: dateStr,
-          time: form.time || "08:30",
-          venue: form.venue || "",
-          agenda: form.agenda || "",
-          attendee_ids: form.attendee_ids,
-          attendee_names: names,
-          status: "Scheduled",
-          department_id: form.department_id || "",
-          meeting_type: "daily_morning",
-        }));
+        const meetingsList = weekdays.map((dateStr) => {
+          const dayName = getMeetingDayName(dateStr);
+          return {
+            title: form.title || `Regular Standup - ${dayName} (${formatMeetingDate(dateStr)})`,
+            date: dateStr,
+            time: form.time || "08:30",
+            venue: form.venue || "",
+            agenda: form.agenda || "",
+            attendee_ids: form.attendee_ids,
+            attendee_names: names,
+            status: "Scheduled",
+            department_id: form.department_id || "",
+            meeting_type: "daily_morning",
+          };
+        });
 
         const res = await apiClient.post("/meetings/batch", {
           meetings: meetingsList,
-          summary_title: `Daily Morning Standup (${monthLabel})`,
-          summary_message: `${performer.name} scheduled Daily Morning Meetings (Mon–Fri at ${form.time || "08:30"}) for ${monthLabel} (${weekdays.length} upcoming sessions).`,
+          summary_title: `Standup Meetings (Mon, Wed, Fri - ${monthLabel})`,
+          summary_message: `${performer.name} scheduled Regular Standup Meetings (Mon, Wed, Fri at ${form.time || "08:30"}) for ${monthLabel} (${weekdays.length} upcoming sessions).`,
         });
 
-        await logAudit("Scheduled Daily Morning Meetings", "Meeting", res.created?.[0]?.id || "batch", form.title, performer, `${weekdays.length} sessions scheduled for ${monthLabel}`);
+        await logAudit("Scheduled Standup Meetings", "Meeting", res.created?.[0]?.id || "batch", form.title, performer, `${weekdays.length} Mon/Wed/Fri sessions scheduled for ${monthLabel}`);
         toast({
-          title: "Daily Morning Meetings Scheduled",
-          description: `Successfully scheduled ${weekdays.length} upcoming weekday meetings for ${monthLabel} with ${names.length} attendee(s).`,
+          title: "Standup Meetings Scheduled",
+          description: `Successfully scheduled ${weekdays.length} upcoming sessions (Mon, Wed, Fri) for ${monthLabel} with ${names.length} attendee(s).`,
         });
       } else if (scheduleMode === "weekly_update") {
         const { year, month } = parseMonthValue(targetMonth);
@@ -695,7 +711,7 @@ export default function Meetings() {
   const previewDates = useMemo(() => {
     const { year, month } = parseMonthValue(targetMonth);
     if (scheduleMode === "daily_morning") {
-      return getMonthWeekdays(year, month);
+      return getMonthMWFDays(year, month);
     }
     if (scheduleMode === "weekly_update") {
       return getMonthWeeklyDays(year, month, weeklyDay);
@@ -708,12 +724,57 @@ export default function Meetings() {
     return obj ? obj.label : targetMonth;
   }, [targetMonth]);
 
+  const [syncingSchedule, setSyncingSchedule] = useState(false);
+  const [notifyingStaff, setNotifyingStaff] = useState(false);
+
+  const handleSyncSchedule = async () => {
+    if (!confirm("Align all existing meetings in the database to the Monday, Wednesday, Friday schedule? Meetings on other days will be shifted forward to the next valid MWF day.")) return;
+    setSyncingSchedule(true);
+    try {
+      const res = await apiClient.post("/meetings/adjust-schedule");
+      toast({
+        title: "Schedule Synchronized",
+        description: res.message || `Adjusted ${res.adjusted_count || 0} meeting(s) to Monday, Wednesday, or Friday.`,
+      });
+      loadData();
+    } catch (e) {
+      toast({
+        title: "Error",
+        description: e?.response?.data?.error || e?.message || "Failed to adjust meetings",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncingSchedule(false);
+    }
+  };
+
+  const handleNotifyStaff = async () => {
+    if (!confirm("Send a system-wide notification and announcement to all staff members about the Monday, Wednesday, and Friday meeting schedule?")) return;
+    setNotifyingStaff(true);
+    try {
+      const res = await apiClient.post("/meetings/notify-schedule-update");
+      toast({
+        title: "Staff Notified",
+        description: res.message || "All staff members have been notified of the updated meeting schedule.",
+      });
+      window.dispatchEvent(new CustomEvent("notifications-updated"));
+    } catch (e) {
+      toast({
+        title: "Error",
+        description: e?.response?.data?.error || e?.message || "Failed to notify staff",
+        variant: "destructive",
+      });
+    } finally {
+      setNotifyingStaff(false);
+    }
+  };
+
   const renderMeetingTypeBadge = (meetingType) => {
     switch (meetingType) {
       case "daily_morning":
         return (
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-            <Sun className="w-3 h-3 text-amber-500" /> Daily Morning
+            <Sun className="w-3 h-3 text-amber-500" /> Mon / Wed / Fri Standup
           </span>
         );
       case "weekly_update":
@@ -747,13 +808,56 @@ export default function Meetings() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-heading font-bold text-slate-900">Meetings</h1>
-          <p className="text-sm text-slate-500 mt-1">Schedule daily morning standups, weekly updates, departmental meetings, or custom meetings</p>
+          <p className="text-sm text-slate-500 mt-1">Schedule regular standups (Mon, Wed, Fri), weekly updates, departmental meetings, or custom meetings</p>
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={() => openCreate("daily_morning")} className="bg-slate-800 hover:bg-slate-900 shadow-sm">
             <Plus className="w-4 h-4 mr-1.5" /> Schedule Meeting
           </Button>
         </div>
+      </div>
+
+      {/* MWF Schedule Policy & Quick Actions Banner */}
+      <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-amber-500 text-white flex flex-col items-center justify-center font-bold text-xs shrink-0 shadow-sm tracking-tighter">
+            <span>M · W</span>
+            <span className="text-[10px] text-amber-100">FRI</span>
+          </div>
+          <div>
+            <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <span>Regular Meeting Days: Monday, Wednesday & Friday</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold uppercase tracking-wider">Active Policy</span>
+            </h4>
+            <p className="text-xs text-slate-600 mt-0.5">
+              All company-wide standups and alignment meetings are set for <strong>Monday, Wednesday, and Friday at 08:30 AM</strong>.
+            </p>
+          </div>
+        </div>
+        {canAdminister && (
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleSyncSchedule}
+              disabled={syncingSchedule}
+              className="text-xs h-8 bg-white border-amber-300 hover:bg-amber-100 text-amber-900 font-medium"
+            >
+              {syncingSchedule ? "Aligning..." : "Sync to Mon/Wed/Fri"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleNotifyStaff}
+              disabled={notifyingStaff}
+              className="text-xs h-8 bg-white border-amber-300 hover:bg-amber-100 text-amber-900 font-medium"
+            >
+              {notifyingStaff ? "Notifying..." : "Notify Staff"}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Filters and search */}
@@ -785,7 +889,7 @@ export default function Meetings() {
           <span className="text-xs text-slate-400 mr-1 font-medium">Type:</span>
           {[
             { id: "all", label: "All Types", icon: Layers, color: "text-slate-600" },
-            { id: "daily_morning", label: "Daily Morning (Mon–Fri)", icon: Sun, color: "text-amber-600" },
+            { id: "daily_morning", label: "Standups (Mon, Wed, Fri)", icon: Sun, color: "text-amber-600" },
             { id: "weekly_update", label: "Weekly Update", icon: CalendarRange, color: "text-indigo-600" },
             { id: "departmental", label: "Departmental", icon: Building2, color: "text-emerald-600" },
             { id: "custom", label: "Custom / Ad-hoc", icon: Sparkles, color: "text-slate-600" },
@@ -843,6 +947,16 @@ export default function Meetings() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2 mb-1.5">
                         {renderMeetingTypeBadge(m.meeting_type)}
+                        {m.date && (
+                          <span className={cn(
+                            "text-xs px-2.5 py-0.5 rounded-full font-bold border shrink-0",
+                            ["Monday", "Wednesday", "Friday"].includes(getMeetingDayName(m.date))
+                              ? "bg-amber-100/90 text-amber-900 border-amber-300 shadow-2xs"
+                              : "bg-slate-100 text-slate-700 border-slate-200"
+                          )}>
+                            {getMeetingDayName(m.date)}
+                          </span>
+                        )}
                         <span className={cn("text-xs px-2.5 py-0.5 rounded-full font-semibold border shrink-0",
                           m.status === "Completed" ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
                             m.status === "Cancelled" ? "bg-red-100 text-red-700 border-red-200" : "bg-blue-100 text-blue-700 border-blue-200")}>
@@ -851,7 +965,10 @@ export default function Meetings() {
                       </div>
                       <h3 className="font-heading font-bold text-slate-900 text-base leading-snug">{m.title}</h3>
                       <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
-                        <span className="flex items-center gap-1 font-medium text-slate-700"><CalendarDays className="w-3.5 h-3.5 text-slate-400" /> {formatDate(m.date)}</span>
+                        <span className="flex items-center gap-1.5 font-semibold text-slate-800 bg-amber-50/80 px-2 py-0.5 rounded border border-amber-200/80">
+                          <CalendarDays className="w-3.5 h-3.5 text-amber-600" />
+                          {formatMeetingDate(m.date)}
+                        </span>
                         {m.time && <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-slate-400" /> {m.time}</span>}
                         {m.venue && <span className="flex items-center gap-1 text-slate-600 truncate max-w-xs"><MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /> {m.venue}</span>}
                       </div>
@@ -953,11 +1070,11 @@ export default function Meetings() {
                     <div className="flex items-center justify-between w-full mb-1.5">
                       <Sun className={cn("w-4 h-4", scheduleMode === "daily_morning" ? "text-amber-600" : "text-slate-400")} />
                       <span className={cn("text-[10px] px-1.5 py-0.2 rounded font-semibold", scheduleMode === "daily_morning" ? "bg-amber-200 text-amber-900" : "bg-slate-100 text-slate-500")}>
-                        Batch
+                        Mon, Wed, Fri
                       </span>
                     </div>
-                    <span className="font-semibold text-xs text-slate-900">Daily Morning</span>
-                    <span className="text-[11px] text-slate-500 mt-0.5 leading-tight">Mon to Fri for a month</span>
+                    <span className="font-semibold text-xs text-slate-900">Standup (Mon/Wed/Fri)</span>
+                    <span className="text-[11px] text-slate-500 mt-0.5 leading-tight">Mon, Wed & Fri for month</span>
                   </button>
 
                   <button
@@ -1024,15 +1141,15 @@ export default function Meetings() {
             )}
 
             <form onSubmit={handleMeetingSubmit} className="space-y-4">
-              {/* Daily Morning Mode Fields */}
+              {/* Mon/Wed/Fri Standup Mode Fields */}
               {scheduleMode === "daily_morning" && !editing && (
                 <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-4 space-y-3">
                   <div className="flex items-center gap-2 text-amber-900 font-semibold text-sm">
                     <Sun className="w-4 h-4 text-amber-600" />
-                    <span>Daily Morning Standup Settings (Monday – Friday)</span>
+                    <span>Regular Standup Settings (Monday, Wednesday, Friday)</span>
                   </div>
                   <p className="text-xs text-amber-800 leading-relaxed">
-                    This will schedule a standup every weekday (Monday through Friday, skipping weekends) for the entire selected month.
+                    This will schedule standup sessions exclusively for every <strong>Monday, Wednesday, and Friday</strong> across the selected month.
                   </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
@@ -1045,7 +1162,7 @@ export default function Meetings() {
                           setTargetMonth(val);
                           const monthObj = getMonthOptions().find((o) => o.value === val);
                           if (monthObj) {
-                            setForm((prev) => ({ ...prev, title: `Daily Morning Standup - ${monthObj.label}` }));
+                            setForm((prev) => ({ ...prev, title: `Regular Standup (Mon, Wed, Fri) - ${monthObj.label}` }));
                           }
                         }}
                         className="w-full mt-1 px-3 py-2 text-xs border border-amber-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
@@ -1057,7 +1174,7 @@ export default function Meetings() {
                     </div>
 
                     <div>
-                      <Label className="text-xs">Daily Standup Time</Label>
+                      <Label className="text-xs">Standup Time</Label>
                       <Input
                         type="time"
                         value={form.time}
@@ -1069,7 +1186,7 @@ export default function Meetings() {
 
                   <div className="pt-2 border-t border-amber-200/60 flex items-center justify-between text-xs">
                     <span className="text-amber-900 font-medium">
-                      📅 <strong>{previewDates.length} weekday sessions</strong> will be created for {targetMonthLabel}.
+                      📅 <strong>{previewDates.length} sessions (Mon, Wed, Fri)</strong> will be created for {targetMonthLabel}.
                     </span>
                     <button
                       type="button"
@@ -1084,8 +1201,8 @@ export default function Meetings() {
                     <div className="p-2.5 bg-white/90 rounded-lg border border-amber-200 max-h-32 overflow-y-auto">
                       <div className="flex flex-wrap gap-1.5">
                         {previewDates.map((d) => (
-                          <span key={d} className="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-100 text-amber-900">
-                            {formatDate(d)}
+                          <span key={d} className="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-medium">
+                            {formatMeetingDate(d)}
                           </span>
                         ))}
                       </div>
@@ -1227,6 +1344,25 @@ export default function Meetings() {
                       onChange={(e) => setForm({ ...form, date: e.target.value })}
                       required
                     />
+                    {form.date && (
+                      <div className="mt-1 text-[11px]">
+                        {(() => {
+                          const d = new Date(form.date + "T12:00:00");
+                          const dow = d.getDay();
+                          const isMWF = dow === 1 || dow === 3 || dow === 5;
+                          const dayName = d.toLocaleDateString("en-US", { weekday: "long" });
+                          return isMWF ? (
+                            <span className="text-emerald-700 font-medium">
+                              ✓ {dayName} (Regular meeting day)
+                            </span>
+                          ) : (
+                            <span className="text-amber-700">
+                              ℹ️ {dayName} (Note: Regular company meeting days are Mon, Wed, Fri)
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <Label>Time</Label>
@@ -1329,7 +1465,7 @@ export default function Meetings() {
                   ) : editing ? (
                     "Update Meeting"
                   ) : scheduleMode === "daily_morning" ? (
-                    `Schedule ${previewDates.length} Daily Morning Meetings`
+                    `Schedule ${previewDates.length} Standup Meetings (Mon, Wed, Fri)`
                   ) : scheduleMode === "weekly_update" ? (
                     `Schedule ${previewDates.length} Weekly Update Meetings`
                   ) : (
@@ -1350,7 +1486,19 @@ export default function Meetings() {
               <div>
                 <h2 className="text-xl font-heading font-bold text-slate-900">{showDetail.title}</h2>
                 <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-500">
-                  <span>{formatDate(showDetail.date)}</span>
+                  <span className="font-semibold text-slate-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                    {formatMeetingDate(showDetail.date)}
+                  </span>
+                  {showDetail.date && (
+                    <span className={cn(
+                      "text-xs px-2 py-0.5 rounded-full font-bold border",
+                      ["Monday", "Wednesday", "Friday"].includes(getMeetingDayName(showDetail.date))
+                        ? "bg-amber-100 text-amber-900 border-amber-300"
+                        : "bg-slate-100 text-slate-700 border-slate-200"
+                    )}>
+                      {getMeetingDayName(showDetail.date)}
+                    </span>
+                  )}
                   {showDetail.time && <span>at {showDetail.time}</span>}
                   {showDetail.venue && <span>• {showDetail.venue}</span>}
                   <span>• Scheduled by <strong>{showDetail.created_by_name || "Staff"}</strong></span>
