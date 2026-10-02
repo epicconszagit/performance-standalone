@@ -279,7 +279,8 @@ export default function Tasks() {
       return;
     }
     const todayDate = new Date().toISOString().split("T")[0];
-    if (form.expected_completion_date && form.expected_completion_date < todayDate) {
+    const prevExp = editing?.expected_completion_date ? String(editing.expected_completion_date).split("T")[0] : "";
+    if ((!editing || (form.expected_completion_date && form.expected_completion_date !== prevExp)) && form.expected_completion_date && form.expected_completion_date < todayDate) {
       toast({
         title: "Invalid Date",
         description: "Expected completion date cannot be in the past. Please select today or a future date.",
@@ -287,7 +288,8 @@ export default function Tasks() {
       });
       return;
     }
-    if (form.deadline && new Date(form.deadline) < new Date()) {
+    const currentDeadlineStr = editing?.deadline ? new Date(editing.deadline).toISOString().slice(0, 16) : "";
+    if ((!editing || (form.deadline && form.deadline !== currentDeadlineStr)) && form.deadline && new Date(form.deadline) < new Date()) {
       toast({
         title: "Invalid Deadline",
         description: "Task deadline cannot be in the past. Please select a future date and time.",
@@ -347,23 +349,25 @@ export default function Tasks() {
     }
     if (task.status !== "Pending") return;
     try {
+      const starterId = employee?.id || performer?.id || user?.id;
+      const starterName = employee?.full_name || performer?.name || user?.full_name || "Staff Member";
       await Task.update(task.id, {
         status: "In Progress",
         doer_started: true,
         doer_started_date: new Date().toISOString(),
-        doer_started_by_id: employee.id,
-        doer_started_by_name: employee.full_name,
+        doer_started_by_id: starterId,
+        doer_started_by_name: starterName,
         progress_pct: 25,
       });
       await logAudit("Started Task", "Task", task.id, task.title, performer, "Doer started work");
-      if (task.assigned_by_id && task.assigned_by_id !== employee.id) {
+      if (task.assigned_by_id && task.assigned_by_id !== starterId) {
         const mgr = employees.find((e) => e.id === task.assigned_by_id);
-        if (mgr) await createNotification(mgr.user_id || mgr.id, mgr.id, "Task Started", `${employee.full_name} started working on "${task.title}"`, "task_started", task.id, "/tasks");
+        if (mgr) await createNotification(mgr.user_id || mgr.id, mgr.id, "Task Started", `${starterName} started working on "${task.title}"`, "task_started", task.id, "/tasks");
       }
       toast({ title: "Started", description: "Task is now in progress" });
       loadData();
     } catch (e) {
-      toast({ title: "Error", description: "Failed to start task", variant: "destructive" });
+      toast({ title: "Error", description: e?.message || "Failed to start task", variant: "destructive" });
     }
   };
 
@@ -379,6 +383,8 @@ export default function Tasks() {
       return;
     }
     try {
+      const submitterId = employee?.id || performer?.id || user?.id;
+      const submitterName = employee?.full_name || performer?.name || user?.full_name || "Staff Member";
       await Task.update(task.id, {
         status: "Submitted",
         completion_report_heading: heading,
@@ -387,20 +393,20 @@ export default function Tasks() {
         completion_report_file_name: fileName || "",
         completion_report_date: new Date().toISOString(),
         submitted_date: new Date().toISOString(),
-        submitted_by_id: employee.id,
-        submitted_by_name: employee.full_name,
+        submitted_by_id: submitterId,
+        submitted_by_name: submitterName,
         progress_pct: 90,
       });
       await logAudit("Submitted Task for Approval", "Task", task.id, task.title, performer, "Completion report submitted");
       if (task.assigned_by_id) {
         const mgr = employees.find((e) => e.id === task.assigned_by_id);
-        if (mgr) await createNotification(mgr.user_id || mgr.id, mgr.id, "Task Submitted for Approval", `${employee.full_name} submitted "${task.title}" for your approval`, "task_submitted", task.id, "/tasks");
+        if (mgr) await createNotification(mgr.user_id || mgr.id, mgr.id, "Task Submitted for Approval", `${submitterName} submitted "${task.title}" for your approval`, "task_submitted", task.id, "/tasks");
       }
       toast({ title: "Submitted", description: "Task submitted for approval" });
       setReportTask(null);
       loadData();
     } catch (e) {
-      toast({ title: "Error", description: "Failed to submit report", variant: "destructive" });
+      toast({ title: "Error", description: e?.message || "Failed to submit report", variant: "destructive" });
     }
   };
 
@@ -412,12 +418,14 @@ export default function Tasks() {
     if (task.status !== "Submitted") return;
     const today = new Date().toISOString().split("T")[0];
     try {
+      const approverId = employee?.id || performer?.id || user?.id;
+      const approverName = employee?.full_name || performer?.name || user?.full_name || "Administrator";
       await Task.update(task.id, {
         status: "Completed",
         completed_date: today,
         completed_on_time: task.deadline ? new Date(task.deadline) >= new Date(today) : true,
-        approved_by_id: employee?.id || performer.id,
-        approved_by_name: employee?.full_name || performer.name,
+        approved_by_id: approverId,
+        approved_by_name: approverName,
         approved_date: new Date().toISOString(),
         progress_pct: 100,
       });
@@ -429,7 +437,7 @@ export default function Tasks() {
       toast({ title: "Approved", description: "Task approved and completed" });
       loadData();
     } catch (e) {
-      toast({ title: "Error", description: "Failed to approve task", variant: "destructive" });
+      toast({ title: "Error", description: e?.message || "Failed to approve task", variant: "destructive" });
     }
   };
 
@@ -452,7 +460,7 @@ export default function Tasks() {
       toast({ title: "Rejected", description: "Task sent back for revision" });
       loadData();
     } catch (e) {
-      toast({ title: "Error", description: "Failed to reject task", variant: "destructive" });
+      toast({ title: "Error", description: e?.message || "Failed to reject task", variant: "destructive" });
     }
   };
 
@@ -495,7 +503,7 @@ export default function Tasks() {
         toast({ title: "Reopened", description: "Task reopened" });
         loadData();
       } catch (e) {
-        toast({ title: "Error", description: "Failed to reopen task", variant: "destructive" });
+        toast({ title: "Error", description: e?.message || "Failed to reopen task", variant: "destructive" });
       }
     }
   };

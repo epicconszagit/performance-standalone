@@ -437,7 +437,12 @@ def build_entities_blueprint():
 
         # 1. Prevent self-assignment
         assignee_ids = (data.get("assigned_to_ids") if data else None) or getattr(task, "assigned_to_ids", []) or []
-        emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first() if user else None
+        emp = None
+        if user:
+            emp = Employee.query.filter(
+                (Employee.user_id == user.id)
+                | (db.func.lower(Employee.email) == db.func.lower(user.email))
+            ).first()
         if user and (user.id in assignee_ids or (emp and emp.id in assignee_ids)):
             return "Self-assignment is not allowed. Staff members cannot assign official performance tasks to themselves. Please use your personal To-Do list for self-directed tasks."
 
@@ -474,16 +479,32 @@ def build_entities_blueprint():
 
     def validate_task_update(task, user, data=None):
         from datetime import date as dt_date, datetime
-        raw_exp = (data.get("expected_completion_date") if data else None) or getattr(task, "expected_completion_date", None)
-        if raw_exp:
+
+        # Check expected_completion_date ONLY if it is actively provided in the update payload
+        if data and "expected_completion_date" in data and data.get("expected_completion_date"):
             try:
+                raw_exp = data.get("expected_completion_date")
                 exp_date = datetime.strptime(str(raw_exp).strip().split("T")[0], "%Y-%m-%d").date()
-                if exp_date < dt_date.today():
+                curr_exp = getattr(task, "expected_completion_date", None)
+                if hasattr(curr_exp, "date"):
+                    curr_exp = curr_exp.date()
+                elif isinstance(curr_exp, str):
+                    try:
+                        curr_exp = datetime.strptime(curr_exp.strip().split("T")[0], "%Y-%m-%d").date()
+                    except Exception:
+                        curr_exp = None
+                # Only reject if the user is changing to a date in the past
+                if (curr_exp is None or exp_date != curr_exp) and exp_date < dt_date.today():
                     return "Task expected completion date cannot be in the past."
             except Exception:
                 pass
 
-        emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first() if user else None
+        emp = None
+        if user:
+            emp = Employee.query.filter(
+                (Employee.user_id == user.id)
+                | (db.func.lower(Employee.email) == db.func.lower(user.email))
+            ).first()
         emp_role = emp.role if emp else getattr(user, "role", "")
 
         # 1. Prevent self-assignment and assignment to Administrators if assigned_to_ids is modified
@@ -518,11 +539,12 @@ def build_entities_blueprint():
                     task_assignees = json.loads(task_assignees)
                 except Exception:
                     task_assignees = []
+            assignee_str_ids = {str(x).strip() for x in task_assignees if x is not None}
+            user_id_str = str(user.id).strip() if user else ""
+            emp_id_str = str(emp.id).strip() if emp else ""
             is_assignee = bool(
-                user and (
-                    user.id in task_assignees
-                    or (emp and emp.id in task_assignees)
-                )
+                (user_id_str and user_id_str in assignee_str_ids)
+                or (emp_id_str and emp_id_str in assignee_str_ids)
             )
             if not is_assignee:
                 return "Only the assigned staff member can submit a completion report for this task."
@@ -537,10 +559,19 @@ def build_entities_blueprint():
                     task_assignees = json.loads(task_assignees)
                 except Exception:
                     task_assignees = []
-            if user and (user.id in task_assignees or (emp and emp.id in task_assignees)):
+            assignee_str_ids = {str(x).strip() for x in task_assignees if x is not None}
+            user_id_str = str(user.id).strip() if user else ""
+            emp_id_str = str(emp.id).strip() if emp else ""
+            if (user_id_str and user_id_str in assignee_str_ids) or (emp_id_str and emp_id_str in assignee_str_ids):
                 return "Assignees cannot approve their own tasks. Only the person who assigned the task or an Administrator can approve."
 
-            is_assigner = (user and (task.assigned_by_id == user.id or (emp and task.assigned_by_id == emp.id)))
+            is_assigner = bool(
+                user
+                and (
+                    (task.assigned_by_id and str(task.assigned_by_id).strip() == user_id_str)
+                    or (emp and task.assigned_by_id and str(task.assigned_by_id).strip() == emp_id_str)
+                )
+            )
             is_admin = (user and user.role in ("admin", "Super Administrator", "Director of Operations")) or emp_role in ("Super Administrator", "Director of Operations")
             if not (is_assigner or is_admin):
                 return "Only the person who assigned this task or an authorized Administrator can approve it."
