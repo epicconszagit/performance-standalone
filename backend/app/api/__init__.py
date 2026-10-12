@@ -474,6 +474,18 @@ def build_entities_blueprint():
                     task.department_id = first_emp.department_id
             elif emp and emp.department_id:
                 task.department_id = emp.department_id
+        # 5. Assigner and assignee names population
+        if not getattr(task, "assigned_by_id", None):
+            if emp:
+                task.assigned_by_id = emp.id
+                task.assigned_by_name = emp.full_name
+            elif user:
+                task.assigned_by_id = user.id
+                task.assigned_by_name = user.full_name or user.email
+
+        if (not getattr(task, "assigned_to_names", None) or len(task.assigned_to_names) == 0) and assignee_ids:
+            assignee_emps = Employee.query.filter(Employee.id.in_(assignee_ids)).all()
+            task.assigned_to_names = [e.full_name for e in assignee_emps]
 
         return None
 
@@ -572,7 +584,12 @@ def build_entities_blueprint():
                     or (emp and task.assigned_by_id and str(task.assigned_by_id).strip() == emp_id_str)
                 )
             )
-            is_admin = (user and user.role in ("admin", "Super Administrator", "Director of Operations")) or emp_role in ("Super Administrator", "Director of Operations")
+            is_admin = (
+                (user and user.role in ("admin", "Super Administrator", "Director of Operations", "Chief Executive Officer"))
+                or emp_role in ("Super Administrator", "Director of Operations", "Chief Executive Officer")
+                or (emp and any(term in (emp.position or "").lower() for term in ("chief executive officer", "ceo", "chief executive", "managing director")))
+                or ((user.email or "").strip().lower() in ("cmutovhe@epicnetworkgroup.com", "ceo.test@epicnetworkgroup.com", "epiccons.za@gmail.com"))
+            )
             if not (is_assigner or is_admin):
                 return "Only the person who assigned this task or an authorized Administrator can approve it."
 
@@ -635,7 +652,15 @@ def build_entities_blueprint():
         # Executive overseers oversee all operations across all departments
         emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
         emp_role = emp.role if emp else user.role
-        if user.role == "admin" or emp_role in ("Super Administrator", "Administrator", "Director of Operations"):
+        emp_pos = (emp.position or "").strip().lower() if emp else ""
+        emp_email = (user.email or (emp.email if emp else "")).strip().lower()
+        is_exec = (
+            user.role in ("admin", "Super Administrator", "Director of Operations", "Chief Executive Officer")
+            or emp_role in ("Super Administrator", "Administrator", "Director of Operations", "Chief Executive Officer")
+            or any(term in emp_pos for term in ("chief executive officer", "ceo", "chief executive", "managing director"))
+            or emp_email in ("cmutovhe@epicnetworkgroup.com", "ceo.test@epicnetworkgroup.com", "epiccons.za@gmail.com")
+        )
+        if is_exec:
             return tasks
 
         emp_id = emp.id if emp else None
@@ -724,7 +749,7 @@ def build_entities_blueprint():
             user.role in ("admin", "Super Administrator", "Director of Operations", "Chief Executive Officer")
             or emp_role in ("Super Administrator", "Director of Operations", "Chief Executive Officer")
             or any(term in emp_pos for term in ("chief executive officer", "ceo", "chief executive", "managing director"))
-            or emp_email in ("cmutovhe@epicnetworkgroup.com", "epiccons.za@gmail.com")
+            or emp_email in ("cmutovhe@epicnetworkgroup.com", "ceo.test@epicnetworkgroup.com", "epiccons.za@gmail.com")
         )
         if is_exec:
             return todos
@@ -795,12 +820,18 @@ def build_entities_blueprint():
     )
 
     def filter_task_feedback(feedbacks, user):
-        if not user or user.role in ("admin", "Super Administrator", "Director of Operations"):
+        if not user or user.role in ("admin", "Super Administrator", "Director of Operations", "Chief Executive Officer"):
             return feedbacks
 
         emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
         emp_role = emp.role if emp else user.role
-        if emp_role in ("Super Administrator", "Administrator", "Director of Operations"):
+        emp_pos = (emp.position or "").strip().lower() if emp else ""
+        emp_email = (user.email or (emp.email if emp else "")).strip().lower()
+        if (
+            emp_role in ("Super Administrator", "Administrator", "Director of Operations", "Chief Executive Officer")
+            or any(term in emp_pos for term in ("chief executive officer", "ceo", "chief executive", "managing director"))
+            or emp_email in ("cmutovhe@epicnetworkgroup.com", "ceo.test@epicnetworkgroup.com", "epiccons.za@gmail.com")
+        ):
             return feedbacks
 
         # Filter feedback by whether user has access to view the parent task
@@ -842,7 +873,7 @@ def build_entities_blueprint():
             role_tag = f"{base_role} (Assigner)"
         elif user.id in task_assignees or (emp and emp.id in task_assignees):
             role_tag = f"{base_role} (Assignee)"
-        elif user.role == "admin" or base_role in ("Super Administrator", "Administrator"):
+        elif user.role == "admin" or base_role in ("Super Administrator", "Administrator", "Director of Operations", "Chief Executive Officer"):
             role_tag = f"{base_role} (Management)"
         else:
             role_tag = base_role
@@ -1011,7 +1042,7 @@ def build_entities_blueprint():
             role_tag = f"{base_role} (Author)"
         elif user.id in to_ids or (emp and emp.id in to_ids):
             role_tag = f"{base_role} (Recipient)"
-        elif user.role == "admin" or base_role in ("Super Administrator", "Administrator", "Director of Operations"):
+        elif user.role == "admin" or base_role in ("Super Administrator", "Administrator", "Director of Operations", "Chief Executive Officer"):
             role_tag = f"{base_role} (Management)"
         else:
             role_tag = base_role

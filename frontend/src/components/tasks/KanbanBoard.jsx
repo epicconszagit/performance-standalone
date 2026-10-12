@@ -1,6 +1,6 @@
 import React from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { Clock, Pencil, Trash2, Archive, ArchiveRestore, MessageSquare } from "lucide-react";
+import { Clock, Pencil, Trash2, Archive, ArchiveRestore, MessageSquare, Eye } from "lucide-react";
 import { isOverdue, formatDateTime } from "@/lib/performance";
 import { PriorityBadge } from "@/components/Badges";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,7 @@ export default function KanbanBoard({
   isAdmin,
   onOpenFeedback,
   feedbackCounts = {},
+  onViewTask,
 }) {
   const onDragEnd = (result) => {
     const { destination, source, draggableId } = result;
@@ -62,14 +63,15 @@ export default function KanbanBoard({
                               ref={prov.innerRef}
                               {...prov.draggableProps}
                               {...prov.dragHandleProps}
+                              onClick={() => onViewTask && onViewTask(task)}
                               className={cn(
-                                "bg-white rounded-lg border border-slate-200 p-3 shadow-sm hover:shadow-md transition-shadow",
+                                "bg-white rounded-lg border border-slate-200 p-3 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group",
                                 snap.isDragging && "shadow-lg ring-2 ring-slate-300 rotate-1",
-                                !canEdit && "opacity-80 cursor-default"
+                                !canEdit && "opacity-90"
                               )}
                             >
                               <div className="flex items-start justify-between gap-1 mb-1">
-                                <h4 className="text-sm font-semibold text-slate-900 leading-snug">{task.title}</h4>
+                                <h4 className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition-colors leading-snug">{task.title}</h4>
                                 <PriorityBadge priority={task.priority || "Medium"} />
                               </div>
                               {task.description && (
@@ -89,30 +91,69 @@ export default function KanbanBoard({
                                 )}
                               </div>
                               <div className="flex items-center justify-between gap-1 mt-2 pt-2 border-t border-slate-100">
-                                <button
-                                  type="button"
-                                  onClick={() => onOpenFeedback && onOpenFeedback(task)}
-                                  className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-blue-600 p-1 rounded hover:bg-slate-100 transition-colors"
-                                  title="Open task feedback / discussion"
-                                >
-                                  <MessageSquare className="w-3.5 h-3.5 text-blue-500" />
-                                  <span>Feedback</span>
-                                  {feedbackCounts?.[task.id] > 0 && (
-                                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-600 text-white">
-                                      {feedbackCounts[task.id]}
-                                    </span>
-                                  )}
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onViewTask && onViewTask(task);
+                                    }}
+                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 hover:text-blue-600 p-1 rounded hover:bg-slate-100 transition-colors"
+                                    title="Click to view full task details"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 text-slate-500" />
+                                    <span>Details</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onOpenFeedback && onOpenFeedback(task);
+                                    }}
+                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-blue-600 p-1 rounded hover:bg-slate-100 transition-colors"
+                                    title="Open task feedback / discussion"
+                                  >
+                                    <MessageSquare className="w-3.5 h-3.5 text-blue-500" />
+                                    <span>Feedback</span>
+                                    {feedbackCounts?.[task.id] > 0 && (
+                                      <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-600 text-white">
+                                        {feedbackCounts[task.id]}
+                                      </span>
+                                    )}
+                                  </button>
+                                </div>
 
                                 {isAdmin && (
                                   <div className="flex items-center gap-1">
-                                    <button onClick={() => onEditTask(task)} className="p-1 rounded hover:bg-slate-100 text-slate-500" title="Edit">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onEditTask(task);
+                                      }}
+                                      className="p-1 rounded hover:bg-slate-100 text-slate-500"
+                                      title="Edit"
+                                    >
                                       <Pencil className="w-3 h-3" />
                                     </button>
-                                    <button onClick={() => onArchiveTask(task)} className="p-1 rounded hover:bg-slate-100 text-zinc-500" title="Archive">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onArchiveTask(task);
+                                      }}
+                                      className="p-1 rounded hover:bg-slate-100 text-zinc-500"
+                                      title="Archive"
+                                    >
                                       {task.archived ? <ArchiveRestore className="w-3 h-3" /> : <Archive className="w-3 h-3" />}
                                     </button>
-                                    <button onClick={() => onDeleteTask(task)} className="p-1 rounded hover:bg-red-50 text-red-500" title="Delete">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onDeleteTask(task);
+                                      }}
+                                      className="p-1 rounded hover:bg-red-50 text-red-500"
+                                      title="Delete"
+                                    >
                                       <Trash2 className="w-3 h-3" />
                                     </button>
                                   </div>

@@ -155,6 +155,19 @@ def reset_database():
             )
             db.session.add(branding)
 
+        # Ensure Finance & Fiscal has CEO as manager
+        finance_dept = Department.query.filter_by(name="Finance & Fiscal").first()
+        ceo_emp = Employee.query.filter(
+            (Employee.role == "Chief Executive Officer")
+            | (Employee.email.in_(["ceo.test@epicnetworkgroup.com", "cmutovhe@epicnetworkgroup.com"]))
+        ).first()
+        if finance_dept and ceo_emp:
+            finance_dept.manager_id = ceo_emp.id
+            finance_dept.manager_name = ceo_emp.full_name
+            ceo_emp.department_id = finance_dept.id
+            ceo_emp.department_name = finance_dept.name
+            ceo_emp.department_ids = [finance_dept.id]
+
         # Commit all changes
         db.session.commit()
 

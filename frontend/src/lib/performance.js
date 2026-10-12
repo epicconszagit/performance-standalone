@@ -266,6 +266,12 @@ export function isExecutiveSuperAdminOrCEO(user, employee, role) {
     return true;
   }
   const email = (user?.email || employee?.email || "").trim().toLowerCase();
-  if (email === "epiccons.za@gmail.com") return true;
+  if (
+    email === "epiccons.za@gmail.com" ||
+    email === "cmutovhe@epicnetworkgroup.com" ||
+    email === "ceo.test@epicnetworkgroup.com"
+  ) {
+    return true;
+  }
   return false;
 }

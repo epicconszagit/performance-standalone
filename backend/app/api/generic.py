@@ -101,7 +101,11 @@ def _is_admin(user):
     try:
         from ..models import Employee
         emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
-        if emp and emp.role in ("Super Administrator", "Administrator", "Director of Operations"):
+        if emp and emp.role in ("Super Administrator", "Administrator", "Director of Operations", "Chief Executive Officer"):
+            return True
+        if emp and any(term in (emp.position or "").lower() for term in ("chief executive officer", "ceo", "chief executive", "managing director")):
+            return True
+        if (user.email or "").strip().lower() in ("cmutovhe@epicnetworkgroup.com", "ceo.test@epicnetworkgroup.com", "epiccons.za@gmail.com"):
             return True
     except Exception:
         pass

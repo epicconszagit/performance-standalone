@@ -15,7 +15,11 @@ def can_manage_department(user, dept):
         return True
     emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
     if emp:
-        if emp.role in ("Super Administrator", "Administrator", "Director of Operations"):
+        if emp.role in ("Super Administrator", "Administrator", "Director of Operations", "Chief Executive Officer"):
+            return True
+        if any(term in (emp.position or "").lower() for term in ("chief executive officer", "ceo", "chief executive", "managing director")):
+            return True
+        if (user.email or "").strip().lower() in ("cmutovhe@epicnetworkgroup.com", "ceo.test@epicnetworkgroup.com", "epiccons.za@gmail.com"):
             return True
         if emp.role == "Department Manager" and (emp.department_id == dept.id or (emp.department_ids and dept.id in emp.department_ids)):
             return True

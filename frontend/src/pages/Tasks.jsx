@@ -11,6 +11,7 @@ import { SendEmail, UploadFile } from "@/api/integrations";
 import KanbanBoard from "@/components/tasks/KanbanBoard";
 import SubmitReportDialog from "@/components/tasks/SubmitReportDialog";
 import TaskFeedbackDialog from "@/components/tasks/TaskFeedbackDialog";
+import TaskDetailsDialog from "@/components/tasks/TaskDetailsDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,6 +28,7 @@ import {
   PRIORITY_WEIGHTS,
   isAdministratorRole,
   isTaskRelatedToEmployee,
+  isExecutiveSuperAdminOrCEO,
 } from "@/lib/performance";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
@@ -59,6 +61,8 @@ export default function Tasks() {
   const [reportTask, setReportTask] = useState(null);
   const [reportViewTask, setReportViewTask] = useState(null);
   const [feedbackTask, setFeedbackTask] = useState(null);
+  const [viewTask, setViewTask] = useState(null);
+  const [assigneeDeptFilter, setAssigneeDeptFilter] = useState("all");
   const [feedbackCounts, setFeedbackCounts] = useState({});
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -70,10 +74,11 @@ export default function Tasks() {
     department_id: "",
   });
 
-  const isAdmin = ["Super Administrator", "Administrator", "Director of Operations", "Department Manager"].includes(role);
-  const isExecutiveAdmin = ["Super Administrator", "Administrator", "Director of Operations"].includes(role) || user?.role === "admin";
+  const isExec = isExecutiveSuperAdminOrCEO(user, employee, role);
+  const isAdmin = ["Super Administrator", "Administrator", "Director of Operations", "Department Manager", "Chief Executive Officer"].includes(role) || isExec;
+  const isExecutiveAdmin = ["Super Administrator", "Administrator", "Director of Operations", "Chief Executive Officer"].includes(role) || user?.role === "admin" || isExec;
   const isSecretary = role === "Secretary";
-  const canAssignToAnyone = ["Super Administrator", "Administrator", "Director of Operations", "Department Manager"].includes(role);
+  const canAssignToAnyone = ["Super Administrator", "Administrator", "Director of Operations", "Department Manager", "Chief Executive Officer"].includes(role) || isExec;
 
   const isAdministrator = (emp) => isAdministratorRole(emp);
 
@@ -137,13 +142,20 @@ export default function Tasks() {
 
   useEffect(() => { loadData(); }, [employee]);
 
-  // Handle opening feedback directly if redirected via notification (e.g. ?feedback_task_id=XYZ)
+  // Handle opening feedback or task details directly if redirected via notification (e.g. ?feedback_task_id=XYZ or ?view_task_id=XYZ)
   useEffect(() => {
     const feedbackId = searchParams.get("feedback_task_id");
     if (feedbackId && tasks.length > 0) {
       const targetTask = tasks.find((t) => t.id === feedbackId);
       if (targetTask) {
         setFeedbackTask(targetTask);
+      }
+    }
+    const viewTaskId = searchParams.get("view_task_id") || searchParams.get("task_id");
+    if (viewTaskId && tasks.length > 0) {
+      const targetTask = tasks.find((t) => t.id === viewTaskId);
+      if (targetTask) {
+        setViewTask(targetTask);
       }
     }
   }, [searchParams, tasks]);
@@ -685,6 +697,7 @@ export default function Tasks() {
           isAdmin={isAdmin || isSecretary}
           onOpenFeedback={(task) => setFeedbackTask(task)}
           feedbackCounts={feedbackCounts}
+          onViewTask={(task) => setViewTask(task)}
         />
       ) : (
         <div className="space-y-3">
@@ -700,7 +713,11 @@ export default function Tasks() {
               const assigner = isAssigner(task);
               const seenBy = seenNames(task);
               return (
-                <div key={task.id} className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-shadow">
+                <div
+                  key={task.id}
+                  onClick={() => setViewTask(task)}
+                  className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group"
+                >
                   <div className="flex items-start gap-4">
                     <div className={cn("w-1 self-stretch rounded-full",
                       task.status === "Completed" ? "bg-emerald-500" :
@@ -710,7 +727,7 @@ export default function Tasks() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <h3 className="text-sm font-semibold text-slate-900">{task.title}</h3>
+                          <h3 className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">{task.title}</h3>
                           {task.description && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{task.description}</p>}
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -747,7 +764,7 @@ export default function Tasks() {
 
                       {/* Task attachment (from the assigner) */}
                       {task.attachment_file_url && (
-                        <a href={task.attachment_file_url} target="_blank" rel="noreferrer"
+                        <a href={task.attachment_file_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
                           className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700">
                           <Paperclip className="w-3.5 h-3.5" /> {task.attachment_file_name || "Task attachment"}
                         </a>
@@ -755,7 +772,7 @@ export default function Tasks() {
 
                       {/* Completion report indicator */}
                       {task.completion_report_heading && (
-                        <button onClick={() => setReportViewTask(task)}
+                        <button onClick={(e) => { e.stopPropagation(); setReportViewTask(task); }}
                           className="mt-2 ml-3 inline-flex items-center gap-1 text-xs font-medium text-amber-600 hover:text-amber-700">
                           <FileText className="w-3.5 h-3.5" /> {task.completion_report_heading}
                         </button>
@@ -765,7 +782,22 @@ export default function Tasks() {
                       <div className="flex flex-wrap items-center gap-2 mt-3">
                         <button
                           type="button"
-                          onClick={() => setFeedbackTask(task)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewTask(task);
+                          }}
+                          className="text-xs font-medium px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors flex items-center gap-1.5"
+                          title="Click to view all task information and instructions"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-blue-600" />
+                          <span>View Details</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFeedbackTask(task);
+                          }}
                           className="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors flex items-center gap-1.5"
                           title="Ask questions, leave feedback, or discuss this task"
                         >
@@ -778,13 +810,13 @@ export default function Tasks() {
                           )}
                         </button>
                         {assignee && task.status === "Pending" && (
-                          <button onClick={() => handleStart(task)}
+                          <button onClick={(e) => { e.stopPropagation(); handleStart(task); }}
                             className="text-xs font-medium px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors flex items-center gap-1">
                             <Check className="w-3 h-3" /> Start Task
                           </button>
                         )}
                         {assignee && task.status === "In Progress" && (
-                          <button onClick={() => setReportTask(task)}
+                          <button onClick={(e) => { e.stopPropagation(); setReportTask(task); }}
                             className="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors flex items-center gap-1">
                             <Send className="w-3 h-3" /> Submit Report
                           </button>
@@ -795,37 +827,37 @@ export default function Tasks() {
                           </span>
                         )}
                         {assignee && task.status === "Submitted" && (
-                          <button onClick={() => setReportTask(task)}
+                          <button onClick={(e) => { e.stopPropagation(); setReportTask(task); }}
                             className="text-xs font-medium px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors flex items-center gap-1">
                             <Send className="w-3 h-3" /> Resubmit
                           </button>
                         )}
                         {assigner && task.status === "Submitted" && (
                           <>
-                            <button onClick={() => handleApprove(task)}
+                            <button onClick={(e) => { e.stopPropagation(); handleApprove(task); }}
                               className="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3" /> Approve
                             </button>
-                            <button onClick={() => handleReject(task)}
+                            <button onClick={(e) => { e.stopPropagation(); handleReject(task); }}
                               className="text-xs font-medium px-2.5 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex items-center gap-1">
                               <XCircle className="w-3 h-3" /> Reject
                             </button>
                           </>
                         )}
                         {assigner && task.status === "Completed" && (
-                          <button onClick={() => handleStatusChange(task, "Pending")}
+                          <button onClick={(e) => { e.stopPropagation(); handleStatusChange(task, "Pending"); }}
                             className="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors">
                             Reopen
                           </button>
                         )}
                         {(isAdmin || isSecretary) && (
                           <>
-                            <button onClick={() => handleArchive(task)} className="text-xs font-medium px-2.5 py-1 rounded-lg bg-zinc-50 text-zinc-600 hover:bg-zinc-100 transition-colors flex items-center gap-1">
+                            <button onClick={(e) => { e.stopPropagation(); handleArchive(task); }} className="text-xs font-medium px-2.5 py-1 rounded-lg bg-zinc-50 text-zinc-600 hover:bg-zinc-100 transition-colors flex items-center gap-1">
                               {task.archived ? <ArchiveRestore className="w-3 h-3" /> : <Archive className="w-3 h-3" />}
                               {task.archived ? "Restore" : "Archive"}
                             </button>
-                            <button onClick={() => openEdit(task)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><Pencil className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => handleDelete(task)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={(e) => { e.stopPropagation(); openEdit(task); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><Pencil className="w-3.5 h-3.5" /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDelete(task); }} className="p-1.5 rounded-lg hover:bg-red-50 text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                           </>
                         )}
                       </div>
@@ -873,15 +905,81 @@ export default function Tasks() {
                 </Select>
               </div>
               <div>
-                <Label className="mb-1 block">Assign To *</Label>
-                <div className="border border-slate-200 rounded-lg p-3 max-h-40 overflow-y-auto space-y-1.5">
-                  {employees.filter((e) => e.status === "active" && e.id !== employee?.id && !isAdministrator(e)).map((emp) => (
-                    <label key={emp.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded">
-                      <input type="checkbox" checked={form.assigned_to_ids.includes(emp.id)} onChange={() => toggleAssignee(emp.id)} className="rounded" />
-                      <span className="text-sm text-slate-700">{emp.full_name}</span>
-                      <span className="text-xs text-slate-400">{emp.department_name || emp.role}</span>
-                    </label>
-                  ))}
+                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                  <Label>Assign To *</Label>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={assigneeDeptFilter}
+                      onValueChange={(val) => setAssigneeDeptFilter(val)}
+                    >
+                      <SelectTrigger className="h-7 text-xs w-[160px] py-0 px-2 bg-slate-50">
+                        <SelectValue placeholder="Filter Department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Departments</SelectItem>
+                        {departments.map((d) => (
+                          <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {assigneeDeptFilter !== "all" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const deptStaff = employees.filter(
+                            (e) =>
+                              e.status === "active" &&
+                              e.id !== employee?.id &&
+                              !isAdministrator(e) &&
+                              (e.department_id === assigneeDeptFilter ||
+                                (Array.isArray(e.department_ids) && e.department_ids.includes(assigneeDeptFilter)))
+                          );
+                          const deptStaffIds = deptStaff.map((e) => e.id);
+                          const allSelected = deptStaffIds.every((id) => form.assigned_to_ids.includes(id));
+                          if (allSelected) {
+                            setForm({
+                              ...form,
+                              assigned_to_ids: form.assigned_to_ids.filter((id) => !deptStaffIds.includes(id)),
+                            });
+                          } else {
+                            setForm({
+                              ...form,
+                              assigned_to_ids: Array.from(new Set([...form.assigned_to_ids, ...deptStaffIds])),
+                            });
+                          }
+                        }}
+                        className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 underline"
+                      >
+                        Toggle Department Staff
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 rounded-lg p-3 max-h-48 overflow-y-auto space-y-1.5">
+                  {employees
+                    .filter((emp) => emp.status === "active" && emp.id !== employee?.id && !isAdministrator(emp))
+                    .filter((emp) => {
+                      if (assigneeDeptFilter === "all") return true;
+                      return (
+                        emp.department_id === assigneeDeptFilter ||
+                        (Array.isArray(emp.department_ids) && emp.department_ids.includes(assigneeDeptFilter))
+                      );
+                    })
+                    .map((emp) => (
+                      <label key={emp.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded">
+                        <input
+                          type="checkbox"
+                          checked={form.assigned_to_ids.includes(emp.id)}
+                          onChange={() => toggleAssignee(emp.id)}
+                          className="rounded text-blue-600"
+                        />
+                        <span className="text-sm text-slate-700 font-medium">{emp.full_name}</span>
+                        <span className="text-xs text-slate-400">
+                          {emp.department_name || emp.role}
+                        </span>
+                      </label>
+                    ))}
                   {employees.filter((e) => e.status === "active" && e.id !== employee?.id && !isAdministrator(e)).length === 0 && (
                     <p className="text-xs text-slate-400 p-2 text-center">No assignable staff members available</p>
                   )}
@@ -1056,6 +1154,28 @@ export default function Tasks() {
             setFeedbackTask(null);
             loadFeedbackCounts();
           }}
+        />
+      )}
+
+      {/* Task Full Details & Action Dialog */}
+      {viewTask && (
+        <TaskDetailsDialog
+          task={viewTask}
+          onClose={() => setViewTask(null)}
+          currentEmployee={employee}
+          currentUser={user}
+          departments={departments}
+          employees={employees}
+          feedbackCounts={feedbackCounts}
+          onStartTask={(t) => handleStart(t)}
+          onSubmitReport={(t) => setReportTask(t)}
+          onApproveTask={(t) => handleApprove(t)}
+          onRejectTask={(t) => handleReject(t)}
+          onReopenTask={(t) => handleStatusChange(t, "Pending")}
+          onEditTask={(t) => openEdit(t)}
+          onOpenFeedback={(t) => setFeedbackTask(t)}
+          isAdmin={isAdmin}
+          isSecretary={isSecretary}
         />
       )}
     </div>
