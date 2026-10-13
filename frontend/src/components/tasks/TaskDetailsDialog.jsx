@@ -29,6 +29,9 @@ import {
   isOverdue,
   getEffectiveStatus,
   daysUntil,
+  canApproveTask,
+  canEditTask,
+  getTaskScope,
 } from "@/lib/performance";
 import { cn } from "@/lib/utils";
 
@@ -65,12 +68,12 @@ export default function TaskDetailsDialog({
     )
   );
 
-  const isAssigner =
-    !isAssignee &&
-    ((currentEmployee &&
-      (task.assigned_by_id === currentEmployee.id ||
-        task.assigned_by_id === currentUser?.id)) ||
-      isAdmin);
+  const userRole = currentEmployee?.role || currentUser?.role || "";
+  const canApprove = canApproveTask(task, currentEmployee, currentUser, userRole, departments);
+  const canEdit = canEditTask(task, currentEmployee, currentUser, userRole, departments);
+  const scope = getTaskScope(task, currentEmployee, currentUser, employees);
+
+  const isAssigner = canApprove;
 
   const dept = departments.find((d) => d.id === task.department_id);
 
@@ -100,6 +103,19 @@ export default function TaskDetailsDialog({
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={effStatus} />
               <PriorityBadge priority={task.priority || "Medium"} />
+              {scope === "mine" ? (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 flex items-center gap-1">
+                  <User className="w-3 h-3" /> My Task
+                </span>
+              ) : scope === "department" ? (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200 flex items-center gap-1">
+                  <Building2 className="w-3 h-3" /> Department Task
+                </span>
+              ) : (
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 border border-slate-300 flex items-center gap-1">
+                  <Users className="w-3 h-3" /> Other Dept Task
+                </span>
+              )}
               <span
                 className="text-xs font-bold text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded shadow-2xs"
                 title="Performance Weight"
@@ -536,8 +552,8 @@ export default function TaskDetailsDialog({
               </Button>
             )}
 
-            {/* Edit Task for Admin / Management */}
-            {(isAdmin || isSecretary) && (
+            {/* Edit Task for Assigner / Department Manager / Admin */}
+            {canEdit && (
               <Button
                 size="sm"
                 variant="outline"

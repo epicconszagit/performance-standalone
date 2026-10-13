@@ -4,7 +4,7 @@ import {
   CheckSquare, Plus, Pencil, Trash2, X, Search, Archive, Clock,
   AlertTriangle, CheckCircle2, ArchiveRestore, LayoutGrid, List,
   Eye, FileText, Send, Check, XCircle, Paperclip, ListTodo,
-  PlayCircle, AlertCircle, MessageSquare
+  PlayCircle, AlertCircle, MessageSquare, Building2, User, Users
 } from "lucide-react";
 import { Task, Employee, Department, TaskFeedback } from "@/api/entities";
 import { SendEmail, UploadFile } from "@/api/integrations";
@@ -29,6 +29,11 @@ import {
   isAdministratorRole,
   isTaskRelatedToEmployee,
   isExecutiveSuperAdminOrCEO,
+  getTaskScope,
+  canManageTask,
+  canEditTask,
+  canDeleteTask,
+  canApproveTask,
 } from "@/lib/performance";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
@@ -57,6 +62,7 @@ export default function Tasks() {
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
+  const [scopeFilter, setScopeFilter] = useState("all");
   const [view, setView] = useState("list");
   const [reportTask, setReportTask] = useState(null);
   const [reportViewTask, setReportViewTask] = useState(null);
@@ -84,13 +90,13 @@ export default function Tasks() {
 
   const isAssignee = (task) =>
     !!(task && (task.assigned_to_ids || []).some((id) => (employee && id === employee.id) || (user && id === user.id)));
-  const isAssigner = (task) => {
-    // An assignee can NEVER approve their own task
-    if (isAssignee(task)) return false;
-    if (employee && (task.assigned_by_id === employee.id || task.assigned_by_id === performer.id)) return true;
-    if (isAdmin) return true;
-    return false;
-  };
+
+  const canEdit = (task) => canEditTask(task, employee, user, role, departments);
+  const canDelete = (task) => canDeleteTask(task, employee, user, role, departments);
+  const canApprove = (task) => canApproveTask(task, employee, user, role, departments);
+  const canManage = (task) => canManageTask(task, employee, user, role, departments);
+
+  const isAssigner = (task) => canApprove(task);
 
   const loadFeedbackCounts = async () => {
     try {
@@ -113,11 +119,7 @@ export default function Tasks() {
         Department.list("-created_date", 100),
         TaskFeedback.list("-created_date", 1000).catch(() => []),
       ]);
-      let myTasks = allTasks || [];
-      if (!isExecutiveAdmin) {
-        // Staff, Supervisors, and Department Managers only see tasks related to them and their department
-        myTasks = employee ? (allTasks || []).filter((t) => isTaskRelatedToEmployee(t, employee, emps || [])) : [];
-      }
+      const myTasks = allTasks || [];
       const activeTasks = myTasks.filter((t) => !t.deleted);
       setTasks(activeTasks);
       setTrashedTasks(myTasks.filter((t) => t.deleted));
@@ -141,6 +143,14 @@ export default function Tasks() {
   };
 
   useEffect(() => { loadData(); }, [employee]);
+
+  // Sync initial scope from URL query param if present (?scope=mine|department|other|all)
+  useEffect(() => {
+    const scopeParam = searchParams.get("scope");
+    if (scopeParam && ["all", "mine", "department", "other"].includes(scopeParam)) {
+      setScopeFilter(scopeParam);
+    }
+  }, [searchParams]);
 
   // Handle opening feedback or task details directly if redirected via notification (e.g. ?feedback_task_id=XYZ or ?view_task_id=XYZ)
   useEffect(() => {
@@ -228,6 +238,14 @@ export default function Tasks() {
   };
 
   const openEdit = (task) => {
+    if (!canEdit(task)) {
+      toast({
+        title: "Access Denied",
+        description: "Only the person who assigned the task or the department manager can edit this task.",
+        variant: "destructive"
+      });
+      return;
+    }
     setEditing(task);
     setForm({
       title: task.title || "",
@@ -535,6 +553,14 @@ export default function Tasks() {
   };
 
   const handleDelete = async (task) => {
+    if (!canDelete(task)) {
+      toast({
+        title: "Access Denied",
+        description: "Only the person who assigned the task or the department manager can delete this task.",
+        variant: "destructive"
+      });
+      return;
+    }
     if (!confirm(`Move "${task.title}" to Trash? You can restore it later from the Trash tab.`)) return;
     try {
       await Task.update(task.id, { deleted: true, deleted_date: new Date().toISOString() });
@@ -558,6 +584,10 @@ export default function Tasks() {
   };
 
   const handlePermanentDelete = async (task) => {
+    if (!canDelete(task)) {
+      toast({ title: "Denied", description: "Only the person who assigned the task or the department manager can delete this task", variant: "destructive" });
+      return;
+    }
     if (!confirm(`Permanently delete "${task.title}"? This cannot be undone.`)) return;
     try {
       await Task.delete(task.id);
@@ -571,8 +601,25 @@ export default function Tasks() {
 
   const isTrashView = activeTab === "trash";
 
-  const filtered = (isTrashView ? trashedTasks : tasks).filter((task) => {
-    const matchSearch = !search || task.title?.toLowerCase().includes(search.toLowerCase());
+  const scopeCounts = {
+    all: tasks.length,
+    mine: tasks.filter((t) => getTaskScope(t, employee, user, employees) === "mine").length,
+    department: tasks.filter((t) => getTaskScope(t, employee, user, employees) === "department").length,
+    other: tasks.filter((t) => getTaskScope(t, employee, user, employees) === "other").length,
+  };
+
+  const scopeFilteredTasks = (isTrashView ? trashedTasks : tasks).filter((task) => {
+    if (scopeFilter === "all") return true;
+    const s = getTaskScope(task, employee, user, employees);
+    return s === scopeFilter;
+  });
+
+  const filtered = scopeFilteredTasks.filter((task) => {
+    const matchSearch = !search ||
+      task.title?.toLowerCase().includes(search.toLowerCase()) ||
+      task.description?.toLowerCase().includes(search.toLowerCase()) ||
+      (task.assigned_to_names || []).some((n) => n?.toLowerCase().includes(search.toLowerCase()));
+
     let matchTab = true;
     if (activeTab === "pending") matchTab = task.status === "Pending";
     else if (activeTab === "in_progress") matchTab = task.status === "In Progress";
@@ -584,22 +631,26 @@ export default function Tasks() {
   });
 
   const counts = {
-    all: tasks.length,
-    pending: tasks.filter((t) => t.status === "Pending").length,
-    in_progress: tasks.filter((t) => t.status === "In Progress").length,
-    submitted: tasks.filter((t) => t.status === "Submitted").length,
-    overdue: tasks.filter((t) => isOverdue(t)).length,
-    completed: tasks.filter((t) => t.status === "Completed").length,
-    archived: tasks.filter((t) => t.status === "Archived" || t.archived).length,
+    all: scopeFilteredTasks.length,
+    pending: scopeFilteredTasks.filter((t) => t.status === "Pending").length,
+    in_progress: scopeFilteredTasks.filter((t) => t.status === "In Progress").length,
+    submitted: scopeFilteredTasks.filter((t) => t.status === "Submitted").length,
+    overdue: scopeFilteredTasks.filter((t) => isOverdue(t)).length,
+    completed: scopeFilteredTasks.filter((t) => t.status === "Completed").length,
+    archived: scopeFilteredTasks.filter((t) => t.status === "Archived" || t.archived).length,
     trash: trashedTasks.length,
   };
 
-  const canEditTask = (task) => isAdmin || isSecretary || (employee && (task.assigned_to_ids || []).includes(employee.id));
+  const canEditTaskItem = (task) => canEdit(task);
 
-  const boardTasks = tasks.filter((t) => {
+  const boardTasks = scopeFilteredTasks.filter((t) => {
     if (t.status === "Archived" || t.archived) return false;
     if (!search) return true;
-    return t.title?.toLowerCase().includes(search.toLowerCase());
+    return (
+      t.title?.toLowerCase().includes(search.toLowerCase()) ||
+      t.description?.toLowerCase().includes(search.toLowerCase()) ||
+      (t.assigned_to_names || []).some((n) => n?.toLowerCase().includes(search.toLowerCase()))
+    );
   });
 
   const seenNames = (task) => (task.seen_by_ids || [])
@@ -615,11 +666,94 @@ export default function Tasks() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-heading font-bold text-slate-900">Tasks</h1>
-          <p className="text-sm text-slate-500 mt-1">{isAdmin ? "Manage all company tasks" : "Your assigned tasks"}</p>
+          <p className="text-sm text-slate-500 mt-1">View, track, and manage all assigned tasks across the organization</p>
         </div>
         <Button onClick={openCreate} className="bg-slate-800 hover:bg-slate-900">
           <Plus className="w-4 h-4 mr-1" /> New Task
         </Button>
+      </div>
+
+      {/* Scope Selector: All / My Tasks / Department / Other Departments */}
+      <div className="bg-slate-100/90 p-1 rounded-xl flex flex-wrap gap-1 border border-slate-200">
+        <button
+          type="button"
+          onClick={() => {
+            setScopeFilter("all");
+            setSearchParams((prev) => { prev.set("scope", "all"); return prev; });
+          }}
+          className={cn(
+            "flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all",
+            scopeFilter === "all"
+              ? "bg-white text-slate-900 shadow-sm border border-slate-200"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+          )}
+        >
+          <CheckSquare className="w-3.5 h-3.5 text-slate-500" />
+          <span>All Tasks</span>
+          <span className={cn("px-1.5 py-0.5 rounded-full text-[10px] font-bold", scopeFilter === "all" ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-700")}>
+            {scopeCounts.all}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setScopeFilter("mine");
+            setSearchParams((prev) => { prev.set("scope", "mine"); return prev; });
+          }}
+          className={cn(
+            "flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all",
+            scopeFilter === "mine"
+              ? "bg-blue-600 text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+          )}
+        >
+          <User className="w-3.5 h-3.5" />
+          <span>My Tasks</span>
+          <span className={cn("px-1.5 py-0.5 rounded-full text-[10px] font-bold", scopeFilter === "mine" ? "bg-white text-blue-700" : "bg-blue-100 text-blue-700")}>
+            {scopeCounts.mine}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setScopeFilter("department");
+            setSearchParams((prev) => { prev.set("scope", "department"); return prev; });
+          }}
+          className={cn(
+            "flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all",
+            scopeFilter === "department"
+              ? "bg-purple-600 text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+          )}
+        >
+          <Building2 className="w-3.5 h-3.5" />
+          <span>Department Tasks</span>
+          <span className={cn("px-1.5 py-0.5 rounded-full text-[10px] font-bold", scopeFilter === "department" ? "bg-white text-purple-700" : "bg-purple-100 text-purple-700")}>
+            {scopeCounts.department}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setScopeFilter("other");
+            setSearchParams((prev) => { prev.set("scope", "other"); return prev; });
+          }}
+          className={cn(
+            "flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all",
+            scopeFilter === "other"
+              ? "bg-slate-800 text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+          )}
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>Other Departments</span>
+          <span className={cn("px-1.5 py-0.5 rounded-full text-[10px] font-bold", scopeFilter === "other" ? "bg-white text-slate-800" : "bg-slate-200 text-slate-700")}>
+            {scopeCounts.other}
+          </span>
+        </button>
       </div>
 
       {/* Tabs */}
@@ -643,7 +777,7 @@ export default function Tasks() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="relative max-w-md flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks..." className="pl-9" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks by title, description, or staff..." className="pl-9" />
         </div>
         <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1">
           <button onClick={() => setView("list")} className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors", view === "list" ? "bg-slate-800 text-white" : "text-slate-600 hover:bg-slate-100")}>
@@ -676,10 +810,12 @@ export default function Tasks() {
                       className="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors flex items-center gap-1">
                       <ArchiveRestore className="w-3.5 h-3.5" /> Restore
                     </button>
-                    <button onClick={() => handlePermanentDelete(task)}
-                      className="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex items-center gap-1">
-                      <Trash2 className="w-3.5 h-3.5" /> Delete Forever
-                    </button>
+                    {canDelete(task) && (
+                      <button onClick={() => handlePermanentDelete(task)}
+                        className="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex items-center gap-1">
+                        <Trash2 className="w-3.5 h-3.5" /> Delete Forever
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -693,11 +829,17 @@ export default function Tasks() {
           onEditTask={openEdit}
           onArchiveTask={handleArchive}
           onDeleteTask={handleDelete}
-          canEditTask={canEditTask}
+          canEditTask={canEdit}
+          canDeleteTask={canDelete}
+          canArchiveTask={canManage}
           isAdmin={isAdmin || isSecretary}
           onOpenFeedback={(task) => setFeedbackTask(task)}
           feedbackCounts={feedbackCounts}
           onViewTask={(task) => setViewTask(task)}
+          employee={employee}
+          user={user}
+          employeesList={employees}
+          departments={departments}
         />
       ) : (
         <div className="space-y-3">
@@ -710,8 +852,12 @@ export default function Tasks() {
             filtered.map((task) => {
               const effStatus = getEffectiveStatus(task);
               const assignee = isAssignee(task);
-              const assigner = isAssigner(task);
+              const approver = canApprove(task);
+              const editor = canEdit(task);
+              const deleter = canDelete(task);
+              const manager = canManage(task);
               const seenBy = seenNames(task);
+              const scope = getTaskScope(task, employee, user, employees);
               return (
                 <div
                   key={task.id}
@@ -727,7 +873,22 @@ export default function Tasks() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <h3 className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">{task.title}</h3>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">{task.title}</h3>
+                            {scope === "mine" ? (
+                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+                                <User className="w-3 h-3" /> My Task
+                              </span>
+                            ) : scope === "department" ? (
+                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+                                <Building2 className="w-3 h-3" /> Department
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1">
+                                <Users className="w-3 h-3" /> Other Dept
+                              </span>
+                            )}
+                          </div>
                           {task.description && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{task.description}</p>}
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -832,7 +993,7 @@ export default function Tasks() {
                             <Send className="w-3 h-3" /> Resubmit
                           </button>
                         )}
-                        {assigner && task.status === "Submitted" && (
+                        {approver && task.status === "Submitted" && (
                           <>
                             <button onClick={(e) => { e.stopPropagation(); handleApprove(task); }}
                               className="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors flex items-center gap-1">
@@ -844,21 +1005,27 @@ export default function Tasks() {
                             </button>
                           </>
                         )}
-                        {assigner && task.status === "Completed" && (
+                        {approver && task.status === "Completed" && (
                           <button onClick={(e) => { e.stopPropagation(); handleStatusChange(task, "Pending"); }}
                             className="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors">
                             Reopen
                           </button>
                         )}
-                        {(isAdmin || isSecretary) && (
-                          <>
-                            <button onClick={(e) => { e.stopPropagation(); handleArchive(task); }} className="text-xs font-medium px-2.5 py-1 rounded-lg bg-zinc-50 text-zinc-600 hover:bg-zinc-100 transition-colors flex items-center gap-1">
-                              {task.archived ? <ArchiveRestore className="w-3 h-3" /> : <Archive className="w-3 h-3" />}
-                              {task.archived ? "Restore" : "Archive"}
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); openEdit(task); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><Pencil className="w-3.5 h-3.5" /></button>
-                            <button onClick={(e) => { e.stopPropagation(); handleDelete(task); }} className="p-1.5 rounded-lg hover:bg-red-50 text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-                          </>
+                        {manager && (
+                          <button onClick={(e) => { e.stopPropagation(); handleArchive(task); }} className="text-xs font-medium px-2.5 py-1 rounded-lg bg-zinc-50 text-zinc-600 hover:bg-zinc-100 transition-colors flex items-center gap-1">
+                            {task.archived ? <ArchiveRestore className="w-3 h-3" /> : <Archive className="w-3 h-3" />}
+                            {task.archived ? "Restore" : "Archive"}
+                          </button>
+                        )}
+                        {editor && (
+                          <button onClick={(e) => { e.stopPropagation(); openEdit(task); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500" title="Edit Task details">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {deleter && (
+                          <button onClick={(e) => { e.stopPropagation(); handleDelete(task); }} className="p-1.5 rounded-lg hover:bg-red-50 text-red-500" title="Delete Task">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         )}
                       </div>
                     </div>

@@ -275,3 +275,110 @@ export function isExecutiveSuperAdminOrCEO(user, employee, role) {
   }
   return false;
 }
+
+export function isTaskManagerOfDepartment(task, employee, user, departments = []) {
+  if (!task || (!employee && !user)) return false;
+  const empId = employee?.id;
+  const userId = user?.id;
+  const taskDeptId = task?.department_id;
+
+  if (taskDeptId && Array.isArray(departments)) {
+    const dept = departments.find((d) => d.id === taskDeptId);
+    if (dept?.manager_id && (dept.manager_id === empId || dept.manager_id === userId)) {
+      return true;
+    }
+  }
+
+  // Check if current employee has Department Manager role for this department
+  const role = (employee?.role || user?.role || "").trim();
+  const isDeptManagerRole = role === "Department Manager" || role.toLowerCase().includes("manager");
+  if (isDeptManagerRole && taskDeptId) {
+    if (employee?.department_id === taskDeptId) return true;
+    if (Array.isArray(employee?.department_ids) && employee.department_ids.includes(taskDeptId)) return true;
+  }
+
+  return false;
+}
+
+export function isTaskAssigner(task, employee, user) {
+  if (!task || (!employee && !user)) return false;
+  const empId = employee?.id;
+  const userId = user?.id;
+  if (task.assigned_by_id && (task.assigned_by_id === empId || task.assigned_by_id === userId)) {
+    return true;
+  }
+  if (task.created_by_id && (task.created_by_id === userId || task.created_by_id === empId)) {
+    return true;
+  }
+  return false;
+}
+
+export function canManageTask(task, employee, user, role, departments = []) {
+  if (!task) return false;
+  if (isExecutiveSuperAdminOrCEO(user, employee, role)) return true;
+  if (
+    ["Super Administrator", "Administrator", "Director of Operations"].includes(role) ||
+    user?.role === "admin"
+  ) {
+    return true;
+  }
+  if (isTaskAssigner(task, employee, user)) return true;
+  if (isTaskManagerOfDepartment(task, employee, user, departments)) return true;
+  return false;
+}
+
+export function canApproveTask(task, employee, user, role, departments = []) {
+  if (!task) return false;
+  // Assignees can NEVER approve their own tasks
+  const isAssignee = (task.assigned_to_ids || []).some(
+    (id) => (employee && id === employee.id) || (user && id === user.id)
+  );
+  if (isAssignee) return false;
+  return canManageTask(task, employee, user, role, departments);
+}
+
+export function canEditTask(task, employee, user, role, departments = []) {
+  return canManageTask(task, employee, user, role, departments);
+}
+
+export function canDeleteTask(task, employee, user, role, departments = []) {
+  return canManageTask(task, employee, user, role, departments);
+}
+
+export function getTaskScope(task, employee, user, employeesList = []) {
+  if (!task) return "other";
+  const empId = employee?.id;
+  const userId = user?.id;
+  const assigneeIds = Array.isArray(task.assigned_to_ids) ? task.assigned_to_ids : [];
+
+  // 1. Belonging directly to the user (Assigned to them)
+  if ((empId && assigneeIds.includes(empId)) || (userId && assigneeIds.includes(userId))) {
+    return "mine";
+  }
+
+  // 2. Belonging to user's department
+  const empDeptIds = [
+    employee?.department_id,
+    ...(Array.isArray(employee?.department_ids) ? employee.department_ids : [])
+  ].filter(Boolean);
+
+  if (task.department_id && empDeptIds.includes(task.department_id)) {
+    return "department";
+  }
+
+  if (empDeptIds.length > 0 && assigneeIds.length > 0 && Array.isArray(employeesList)) {
+    const hasDeptAssignee = assigneeIds.some((aid) => {
+      const a = employeesList.find((e) => e.id === aid);
+      if (!a) return false;
+      if (a.department_id && empDeptIds.includes(a.department_id)) return true;
+      if (Array.isArray(a.department_ids) && a.department_ids.some((d) => empDeptIds.includes(d))) return true;
+      return false;
+    });
+    if (hasDeptAssignee) {
+      return "department";
+    }
+  }
+
+  // 3. Other tasks (assigned to others in other departments)
+  return "other";
+}

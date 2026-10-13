@@ -1,7 +1,7 @@
 import React from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { Clock, Pencil, Trash2, Archive, ArchiveRestore, MessageSquare, Eye } from "lucide-react";
-import { isOverdue, formatDateTime } from "@/lib/performance";
+import { Clock, Pencil, Trash2, Archive, ArchiveRestore, MessageSquare, Eye, User, Users, Building2 } from "lucide-react";
+import { isOverdue, formatDateTime, getTaskScope } from "@/lib/performance";
 import { PriorityBadge } from "@/components/Badges";
 import { cn } from "@/lib/utils";
 
@@ -19,10 +19,15 @@ export default function KanbanBoard({
   onArchiveTask,
   onDeleteTask,
   canEditTask,
+  canDeleteTask,
+  canArchiveTask,
   isAdmin,
   onOpenFeedback,
   feedbackCounts = {},
   onViewTask,
+  employee,
+  user,
+  employeesList = [],
 }) {
   const onDragEnd = (result) => {
     const { destination, source, draggableId } = result;
@@ -55,7 +60,10 @@ export default function KanbanBoard({
                   </div>
                   <div className="space-y-2 flex-1">
                     {colTasks.map((task, index) => {
-                      const canEdit = canEditTask(task);
+                      const canEdit = canEditTask ? canEditTask(task) : false;
+                      const canDel = canDeleteTask ? canDeleteTask(task) : false;
+                      const canArch = canArchiveTask ? canArchiveTask(task) : false;
+                      const scope = getTaskScope(task, employee, user, employeesList);
                       return (
                         <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={!canEdit}>
                           {(prov, snap) => (
@@ -74,6 +82,23 @@ export default function KanbanBoard({
                                 <h4 className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition-colors leading-snug">{task.title}</h4>
                                 <PriorityBadge priority={task.priority || "Medium"} />
                               </div>
+
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                {scope === "mine" ? (
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+                                    <User className="w-2.5 h-2.5" /> My Task
+                                  </span>
+                                ) : scope === "department" ? (
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+                                    <Building2 className="w-2.5 h-2.5" /> Dept
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1">
+                                    <Users className="w-2.5 h-2.5" /> Other
+                                  </span>
+                                )}
+                              </div>
+
                               {task.description && (
                                 <p className="text-xs text-slate-500 mt-1 line-clamp-2">{task.description}</p>
                               )}
@@ -124,18 +149,8 @@ export default function KanbanBoard({
                                   </button>
                                 </div>
 
-                                {isAdmin && (
-                                  <div className="flex items-center gap-1">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onEditTask(task);
-                                      }}
-                                      className="p-1 rounded hover:bg-slate-100 text-slate-500"
-                                      title="Edit"
-                                    >
-                                      <Pencil className="w-3 h-3" />
-                                    </button>
+                                <div className="flex items-center gap-1">
+                                  {canArch && (
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -146,6 +161,20 @@ export default function KanbanBoard({
                                     >
                                       {task.archived ? <ArchiveRestore className="w-3 h-3" /> : <Archive className="w-3 h-3" />}
                                     </button>
+                                  )}
+                                  {canEdit && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onEditTask(task);
+                                      }}
+                                      className="p-1 rounded hover:bg-slate-100 text-slate-500"
+                                      title="Edit"
+                                    >
+                                      <Pencil className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                  {canDel && (
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -156,8 +185,8 @@ export default function KanbanBoard({
                                     >
                                       <Trash2 className="w-3 h-3" />
                                     </button>
-                                  </div>
-                                )}
+                                  )}
+                                </div>
                               </div>
                             </div>
                           )}

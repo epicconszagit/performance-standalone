@@ -2,12 +2,20 @@ import React, { useState, useEffect } from "react";
 import { useOutletContext, useNavigate } from "react-router-dom";
 import {
   CheckSquare, Clock, AlertTriangle, TrendingUp, CalendarDays,
-  Megaphone, ArrowRight, Users, Building2, Award, Cake
+  Megaphone, ArrowRight, Users, Building2, Award, Cake, User
 } from "lucide-react";
 import { Task, Employee, Department, Announcement } from "@/api/entities";
 import StatCard from "@/components/StatCard";
 import { StatusBadge } from "@/components/Badges";
-import { isOverdue, calculatePerformance, formatDate, formatDateTime, daysUntil, getClassificationColor, isTaskRelatedToEmployee } from "@/lib/performance";
+import {
+  isOverdue,
+  calculatePerformance,
+  formatDate,
+  formatDateTime,
+  daysUntil,
+  getClassificationColor,
+  getTaskScope,
+} from "@/lib/performance";
 import { checkDeadlineReminders } from "@/lib/deadlineReminders";
 import { getUpcomingBirthdays } from "@/lib/birthdayReminders";
 import { cn } from "@/lib/utils";
@@ -20,6 +28,7 @@ export default function Home() {
   const [departments, setDepartments] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [dashboardScope, setDashboardScope] = useState("mine");
 
   const isAdmin = ["Super Administrator", "Administrator", "Director of Operations"].includes(role);
 
@@ -27,20 +36,13 @@ export default function Home() {
     let mounted = true;
     (async () => {
       try {
-        const allTasks = ((await Task.list("-created_date", 200)) || []).filter((t) => !t.deleted);
+        const allTasks = ((await Task.list("-created_date", 300)) || []).filter((t) => !t.deleted);
         const allEmps = await Employee.list("-created_date", 200);
         const allDepts = await Department.list("-created_date", 100);
         const anns = await Announcement.list("-created_date", 5);
 
-        let myTasks = allTasks || [];
-        if (!isAdmin) {
-          myTasks = employee
-            ? (allTasks || []).filter((t) => isTaskRelatedToEmployee(t, employee, allEmps || []))
-            : [];
-        }
-
         if (!mounted) return;
-        setTasks(myTasks);
+        setTasks(allTasks || []);
         setEmployees(allEmps || []);
         setDepartments(allDepts || []);
         setAnnouncements(anns || []);
@@ -50,7 +52,7 @@ export default function Home() {
       }
     })();
     return () => { mounted = false; };
-  }, [employee, isAdmin]);
+  }, [employee]);
 
   const canRunReminders = ["Super Administrator", "Administrator", "Director of Operations", "Department Manager", "Secretary"].includes(role);
   useEffect(() => {
@@ -60,18 +62,29 @@ export default function Home() {
 
   const upcomingBirthdays = getUpcomingBirthdays(employees, 30);
 
-  const myTaskIds = new Set(tasks.map((t) => t.id));
-  const allTaskData = isAdmin ? tasks : tasks;
-  const perf = calculatePerformance(tasks);
-  const pending = tasks.filter((t) => t.status === "Pending" || t.status === "In Progress");
-  const overdue = tasks.filter((t) => isOverdue(t));
-  const completed = tasks.filter((t) => t.status === "Completed");
-  const upcoming = tasks
+  // Group tasks by scope
+  const myTasks = (tasks || []).filter((t) => getTaskScope(t, employee, user, employees) === "mine");
+  const deptTasks = (tasks || []).filter((t) => getTaskScope(t, employee, user, employees) === "department");
+  const otherTasks = (tasks || []).filter((t) => getTaskScope(t, employee, user, employees) === "other");
+  const companyTasks = tasks || [];
+
+  const scopedTasks =
+    dashboardScope === "mine"
+      ? myTasks
+      : dashboardScope === "department"
+      ? deptTasks
+      : companyTasks;
+
+  const perf = calculatePerformance(scopedTasks);
+  const pending = scopedTasks.filter((t) => t.status === "Pending" || t.status === "In Progress");
+  const overdue = scopedTasks.filter((t) => isOverdue(t));
+  const completed = scopedTasks.filter((t) => t.status === "Completed");
+  const upcoming = scopedTasks
     .filter((t) => !t.archived && t.status !== "Completed" && t.status !== "Archived" && t.deadline)
     .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
     .slice(0, 5);
 
-  const recentTasks = [...tasks]
+  const recentTasks = [...scopedTasks]
     .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))
     .slice(0, 6);
 
@@ -82,6 +95,13 @@ export default function Home() {
       </div>
     );
   }
+
+  const scopeLabel =
+    dashboardScope === "mine"
+      ? "My Tasks"
+      : dashboardScope === "department"
+      ? "Department Tasks"
+      : "Company-Wide";
 
   return (
     <div className="space-y-6">
@@ -96,13 +116,11 @@ export default function Home() {
             Welcome back, {employee?.full_name || user?.full_name || "User"}
           </h1>
           <p className="text-slate-400 mt-2 text-sm max-w-xl">
-            {isAdmin
-              ? "Here's your organization-wide overview of tasks, performance, and operations."
-              : "Here's a summary of your tasks, deadlines, and recent updates."}
+            Track your tasks, department activities, and overall company operations in real time.
           </p>
           <div className="flex flex-wrap gap-3 mt-4">
             <button
-              onClick={() => navigate("/tasks")}
+              onClick={() => navigate(`/tasks?scope=${dashboardScope === "company" ? "all" : dashboardScope}`)}
               className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-2"
             >
               <CheckSquare className="w-4 h-4" /> View Tasks
@@ -119,10 +137,78 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Scope Selector Bar */}
+      <div className="bg-white rounded-xl border border-slate-200 p-3 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">View:</span>
+          <div className="bg-slate-100 p-1 rounded-lg flex flex-wrap gap-1">
+            <button
+              type="button"
+              onClick={() => setDashboardScope("mine")}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
+                dashboardScope === "mine"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200"
+              )}
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>My Tasks ({myTasks.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDashboardScope("department")}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
+                dashboardScope === "department"
+                  ? "bg-purple-600 text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200"
+              )}
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span>Department ({deptTasks.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDashboardScope("company")}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
+                dashboardScope === "company"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200"
+              )}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Company-Wide ({companyTasks.length})</span>
+            </button>
+          </div>
+        </div>
+
+        <button
+          onClick={() => navigate(`/tasks?scope=${dashboardScope === "company" ? "all" : dashboardScope}`)}
+          className="text-xs font-medium text-amber-600 hover:text-amber-700 flex items-center gap-1 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200 transition-colors"
+        >
+          Manage {scopeLabel} <ArrowRight className="w-3 h-3" />
+        </button>
+      </div>
+
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={CheckSquare} label={isAdmin ? "Total Tasks" : "My Tasks"} value={perf.assigned} accent="navy" />
-        <StatCard icon={Clock} label="Pending" value={perf.pending} accent="blue" />
+        <StatCard
+          icon={CheckSquare}
+          label={
+            dashboardScope === "mine"
+              ? "My Assigned Tasks"
+              : dashboardScope === "department"
+              ? "Department Tasks"
+              : "Company Tasks"
+          }
+          value={perf.assigned}
+          accent="navy"
+        />
+        <StatCard icon={Clock} label="Pending / In Progress" value={perf.pending} accent="blue" />
         <StatCard icon={AlertTriangle} label="Overdue" value={perf.overdue} accent="red" />
         <StatCard icon={TrendingUp} label="Completed" value={perf.completed} accent="emerald" />
       </div>
@@ -162,46 +248,81 @@ export default function Home() {
         {/* Recent tasks */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-heading font-bold text-lg text-slate-900">Recent Tasks</h2>
-            <button onClick={() => navigate("/tasks")} className="text-xs font-medium text-amber-600 hover:text-amber-700 flex items-center gap-1">
+            <div className="flex items-center gap-2">
+              <h2 className="font-heading font-bold text-lg text-slate-900">Recent Tasks</h2>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">{scopeLabel}</span>
+            </div>
+            <button
+              onClick={() => navigate(`/tasks?scope=${dashboardScope === "company" ? "all" : dashboardScope}`)}
+              className="text-xs font-medium text-amber-600 hover:text-amber-700 flex items-center gap-1"
+            >
               View all <ArrowRight className="w-3 h-3" />
             </button>
           </div>
           {recentTasks.length === 0 ? (
-            <p className="text-sm text-slate-400 py-8 text-center">No tasks yet</p>
+            <p className="text-sm text-slate-400 py-8 text-center">No tasks in this view</p>
           ) : (
             <div className="space-y-2">
-              {recentTasks.map((task) => (
-                <div key={task.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate">{task.title}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {task.assigned_to_names?.[0] || "Unassigned"}
-                      {task.assigned_to_names?.length > 1 && ` +${task.assigned_to_names.length - 1}`}
-                      {task.deadline && ` • Due ${formatDateTime(task.deadline)}`}
-                    </p>
+              {recentTasks.map((task) => {
+                const scope = getTaskScope(task, employee, user, employees);
+                return (
+                  <div
+                    key={task.id}
+                    onClick={() => navigate(`/tasks?task_id=${task.id}`)}
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer border border-transparent hover:border-slate-200"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-slate-800 truncate">{task.title}</p>
+                        {scope === "mine" ? (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                            Mine
+                          </span>
+                        ) : scope === "department" ? (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                            Dept
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-medium px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                            Other
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {task.assigned_to_names?.[0] || "Unassigned"}
+                        {task.assigned_to_names?.length > 1 && ` +${task.assigned_to_names.length - 1}`}
+                        {task.deadline && ` • Due ${formatDateTime(task.deadline)}`}
+                      </p>
+                    </div>
+                    <StatusBadge status={isOverdue(task) ? "Overdue" : task.status} />
                   </div>
-                  <StatusBadge status={isOverdue(task) ? "Overdue" : task.status} />
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
         {/* Upcoming deadlines */}
         <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <CalendarDays className="w-4 h-4 text-amber-500" />
-            <h2 className="font-heading font-bold text-lg text-slate-900">Upcoming Deadlines</h2>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-amber-500" />
+              <h2 className="font-heading font-bold text-lg text-slate-900">Upcoming Deadlines</h2>
+            </div>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">{scopeLabel}</span>
           </div>
           {upcoming.length === 0 ? (
-            <p className="text-sm text-slate-400 py-8 text-center">No upcoming deadlines</p>
+            <p className="text-sm text-slate-400 py-8 text-center">No upcoming deadlines in this view</p>
           ) : (
             <div className="space-y-3">
               {upcoming.map((task) => {
                 const days = daysUntil(task.deadline);
                 return (
-                  <div key={task.id} className="flex items-start gap-3">
+                  <div
+                    key={task.id}
+                    onClick={() => navigate(`/tasks?task_id=${task.id}`)}
+                    className="flex items-start gap-3 p-1.5 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
                     <div className={cn(
                       "w-10 h-10 rounded-lg flex flex-col items-center justify-center shrink-0 text-xs font-bold",
                       days < 0 ? "bg-red-50 text-red-600" : days <= 2 ? "bg-amber-50 text-amber-600" : "bg-slate-100 text-slate-600"
@@ -223,9 +344,12 @@ export default function Home() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Performance summary */}
         <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Award className="w-4 h-4 text-amber-500" />
-            <h2 className="font-heading font-bold text-lg text-slate-900">Performance</h2>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Award className="w-4 h-4 text-amber-500" />
+              <h2 className="font-heading font-bold text-lg text-slate-900">Performance</h2>
+            </div>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">{scopeLabel}</span>
           </div>
           <div className="text-center py-4">
             <div className="relative inline-flex items-center justify-center">

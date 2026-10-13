@@ -517,7 +517,111 @@ def build_entities_blueprint():
                 (Employee.user_id == user.id)
                 | (db.func.lower(Employee.email) == db.func.lower(user.email))
             ).first()
+    def is_task_assigner_or_dept_manager_or_admin(task, user, emp=None):
+        if not user:
+            return False
+
+        if not emp:
+            emp = Employee.query.filter(
+                (Employee.user_id == user.id)
+                | (db.func.lower(Employee.email) == db.func.lower(user.email))
+            ).first()
+
         emp_role = emp.role if emp else getattr(user, "role", "")
+        emp_pos = (emp.position or "").strip().lower() if emp else ""
+        emp_email = (user.email or (emp.email if emp else "")).strip().lower()
+
+        # 1. Executive / Administrator override
+        is_admin = (
+            user.role in ("admin", "Super Administrator", "Director of Operations", "Chief Executive Officer")
+            or emp_role in ("Super Administrator", "Administrator", "Director of Operations", "Chief Executive Officer")
+            or any(term in emp_pos for term in ("chief executive officer", "ceo", "chief executive", "managing director"))
+            or emp_email in ("cmutovhe@epicnetworkgroup.com", "ceo.test@epicnetworkgroup.com", "epiccons.za@gmail.com")
+        )
+        if is_admin:
+            return True
+
+        user_id_str = str(user.id).strip()
+        emp_id_str = str(emp.id).strip() if emp else ""
+
+        # 2. Assigner of the task
+        if task.assigned_by_id and (
+            str(task.assigned_by_id).strip() == user_id_str
+            or (emp_id_str and str(task.assigned_by_id).strip() == emp_id_str)
+        ):
+            return True
+        if task.created_by_id and str(task.created_by_id).strip() == user_id_str:
+            return True
+
+        # 3. Manager of that department
+        task_dept_id = getattr(task, "department_id", None)
+        if task_dept_id:
+            dept = Department.query.get(task_dept_id)
+            if dept and dept.manager_id and (
+                str(dept.manager_id).strip() == user_id_str
+                or (emp_id_str and str(dept.manager_id).strip() == emp_id_str)
+            ):
+                return True
+            if emp and emp_role in ("Department Manager", "Manager") and (
+                (emp.department_id and str(emp.department_id).strip() == str(task_dept_id).strip())
+                or (isinstance(emp.department_ids, list) and task_dept_id in emp.department_ids)
+            ):
+                return True
+
+        # Fallback for tasks where department_id might not be set: check if emp manages the dept of any assignee
+        if emp:
+            managed_depts = Department.query.filter(
+                (Department.manager_id == emp.id)
+                | (Department.manager_id == user.id)
+            ).all()
+            managed_dept_ids = {d.id for d in managed_depts}
+            if emp_role in ("Department Manager", "Manager") and emp.department_id:
+                managed_dept_ids.add(emp.department_id)
+            if managed_dept_ids:
+                a_ids = getattr(task, "assigned_to_ids", []) or []
+                if isinstance(a_ids, str):
+                    try:
+                        import json
+                        a_ids = json.loads(a_ids)
+                    except Exception:
+                        a_ids = []
+                assignees = Employee.query.filter(Employee.id.in_(a_ids)).all()
+                for a in assignees:
+                    if a.department_id and a.department_id in managed_dept_ids:
+                        return True
+                    if isinstance(a.department_ids, list) and set(a.department_ids) & managed_dept_ids:
+                        return True
+
+        return False
+
+    def validate_task_update(task, user, data=None):
+        from datetime import date as dt_date, datetime
+
+        # Check expected_completion_date ONLY if it is actively provided in the update payload
+        if data and "expected_completion_date" in data and data.get("expected_completion_date"):
+            try:
+                raw_exp = data.get("expected_completion_date")
+                exp_date = datetime.strptime(str(raw_exp).strip().split("T")[0], "%Y-%m-%d").date()
+                curr_exp = getattr(task, "expected_completion_date", None)
+                if hasattr(curr_exp, "date"):
+                    curr_exp = curr_exp.date()
+                elif isinstance(curr_exp, str):
+                    try:
+                        curr_exp = datetime.strptime(curr_exp.strip().split("T")[0], "%Y-%m-%d").date()
+                    except Exception:
+                        curr_exp = None
+                # Only reject if the user is changing to a date in the past
+                if (curr_exp is None or exp_date != curr_exp) and exp_date < dt_date.today():
+                    return "Task expected completion date cannot be in the past."
+            except Exception:
+                pass
+
+        emp = None
+        if user:
+            emp = Employee.query.filter(
+                (Employee.user_id == user.id)
+                | (db.func.lower(Employee.email) == db.func.lower(user.email))
+            ).first()
 
         # 1. Prevent self-assignment and assignment to Administrators if assigned_to_ids is modified
         if data and "assigned_to_ids" in data:
@@ -540,8 +644,30 @@ def build_entities_blueprint():
             if admin_employees or admin_users or linked_admin_users:
                 return "Tasks cannot be assigned to Administrators. Administrators oversee operations rather than receiving performance task assignments."
 
-        # 2. Ensure only assigned staff members can submit a completion report or transition to Submitted
+        # 2. Permission check: Only assigner, department manager, or admin can delete (soft delete)
+        if data and data.get("deleted") is True and not task.deleted:
+            if not is_task_assigner_or_dept_manager_or_admin(task, user, emp):
+                return "Access Denied: Only the person who assigned the task or the manager of that department can delete this task."
+
+        # 3. Permission check: Only assigner, department manager, or admin can reject or reopen a task
         new_status = data.get("status") if data else None
+        is_reopening = new_status == "Pending" and task.status in ("Completed", "Submitted")
+        is_rejecting = data and "rejection_reason" in data and data.get("rejection_reason")
+        if (is_reopening or is_rejecting):
+            if not is_task_assigner_or_dept_manager_or_admin(task, user, emp):
+                return "Access Denied: Only the person who assigned the task or the manager of that department can reject or reopen this task."
+
+        # 4. Permission check: Editing task details (title, description, priority, weight, deadline, assignees, attachments, department)
+        edit_fields = {
+            "title", "description", "priority", "weight", "deadline",
+            "expected_completion_date", "department_id", "assigned_to_ids",
+            "attachment_file_url", "attachment_file_name"
+        }
+        if data and any(k in data for k in edit_fields):
+            if not is_task_assigner_or_dept_manager_or_admin(task, user, emp):
+                return "Access Denied: Only the person who assigned the task or the manager of that department can edit task details."
+
+        # 5. Ensure only assigned staff members can submit a completion report or transition to Submitted
         is_submitting = new_status == "Submitted" or (data and ("completion_report" in data or "completion_report_heading" in data))
         if is_submitting and task.status != "Submitted":
             task_assignees = task.assigned_to_ids or []
@@ -561,7 +687,7 @@ def build_entities_blueprint():
             if not is_assignee:
                 return "Only the assigned staff member can submit a completion report for this task."
 
-        # 3. Prevent self-approval & ensure only assigner or admin can approve
+        # 6. Prevent self-approval & ensure only assigner, department manager, or admin can approve
         is_approving = new_status == "Completed" or (data and (data.get("approved_by_id") or data.get("approved_date")))
         if is_approving and task.status != "Completed":
             task_assignees = task.assigned_to_ids or []
@@ -575,25 +701,12 @@ def build_entities_blueprint():
             user_id_str = str(user.id).strip() if user else ""
             emp_id_str = str(emp.id).strip() if emp else ""
             if (user_id_str and user_id_str in assignee_str_ids) or (emp_id_str and emp_id_str in assignee_str_ids):
-                return "Assignees cannot approve their own tasks. Only the person who assigned the task or an Administrator can approve."
+                return "Assignees cannot approve their own tasks. Only the person who assigned the task or the manager of that department can approve."
 
-            is_assigner = bool(
-                user
-                and (
-                    (task.assigned_by_id and str(task.assigned_by_id).strip() == user_id_str)
-                    or (emp and task.assigned_by_id and str(task.assigned_by_id).strip() == emp_id_str)
-                )
-            )
-            is_admin = (
-                (user and user.role in ("admin", "Super Administrator", "Director of Operations", "Chief Executive Officer"))
-                or emp_role in ("Super Administrator", "Director of Operations", "Chief Executive Officer")
-                or (emp and any(term in (emp.position or "").lower() for term in ("chief executive officer", "ceo", "chief executive", "managing director")))
-                or ((user.email or "").strip().lower() in ("cmutovhe@epicnetworkgroup.com", "ceo.test@epicnetworkgroup.com", "epiccons.za@gmail.com"))
-            )
-            if not (is_assigner or is_admin):
-                return "Only the person who assigned this task or an authorized Administrator can approve it."
+            if not is_task_assigner_or_dept_manager_or_admin(task, user, emp):
+                return "Access Denied: Only the person who assigned this task or the manager of that department can approve it."
 
-        # 3. Priority & weight synchronization
+        # 7. Priority & weight synchronization
         if data and ("priority" in data or "weight" in data):
             prio = data.get("priority") or getattr(task, "priority", "Medium")
             task.priority = prio
@@ -606,7 +719,7 @@ def build_entities_blueprint():
             elif "priority" in data:
                 task.weight = PRIORITY_WEIGHTS.get(prio, 2)
 
-        # 4. Department assignment
+        # 8. Department assignment
         if data and "department_id" in data and data.get("department_id"):
             task.department_id = data.get("department_id")
         elif not getattr(task, "department_id", None):
@@ -618,6 +731,13 @@ def build_entities_blueprint():
             elif emp and emp.department_id:
                 task.department_id = emp.department_id
 
+        return None
+
+    def validate_task_delete(task, user):
+        if not user:
+            return "Authentication required."
+        if not is_task_assigner_or_dept_manager_or_admin(task, user):
+            return "Access Denied: Only the person who assigned the task or the manager of that department can delete this task."
         return None
 
     def filter_tasks(tasks, user):
@@ -649,78 +769,8 @@ def build_entities_blueprint():
         except Exception:
             pass
 
-        # Executive overseers oversee all operations across all departments
-        emp = Employee.query.filter((Employee.user_id == user.id) | (Employee.email == user.email)).first()
-        emp_role = emp.role if emp else user.role
-        emp_pos = (emp.position or "").strip().lower() if emp else ""
-        emp_email = (user.email or (emp.email if emp else "")).strip().lower()
-        is_exec = (
-            user.role in ("admin", "Super Administrator", "Director of Operations", "Chief Executive Officer")
-            or emp_role in ("Super Administrator", "Administrator", "Director of Operations", "Chief Executive Officer")
-            or any(term in emp_pos for term in ("chief executive officer", "ceo", "chief executive", "managing director"))
-            or emp_email in ("cmutovhe@epicnetworkgroup.com", "ceo.test@epicnetworkgroup.com", "epiccons.za@gmail.com")
-        )
-        if is_exec:
-            return tasks
-
-        emp_id = emp.id if emp else None
-        emp_dept_ids = set()
-        if emp:
-            if emp.department_id:
-                emp_dept_ids.add(emp.department_id)
-            if emp.department_ids and isinstance(emp.department_ids, list):
-                for d in emp.department_ids:
-                    if d:
-                        emp_dept_ids.add(d)
-
-        emp_dept_map = {}
-        for e in Employee.query.all():
-            d_ids = set()
-            if e.department_id:
-                d_ids.add(e.department_id)
-            if e.department_ids and isinstance(e.department_ids, list):
-                for d in e.department_ids:
-                    if d:
-                        d_ids.add(d)
-            emp_dept_map[e.id] = d_ids
-
-        allowed = []
-        for t in tasks:
-            assignee_ids = t.assigned_to_ids or []
-            if isinstance(assignee_ids, str):
-                try:
-                    import json
-                    assignee_ids = json.loads(assignee_ids)
-                except Exception:
-                    assignee_ids = []
-
-            # 1. Directly assigned to user/employee
-            if (emp_id and emp_id in assignee_ids) or (user.id in assignee_ids):
-                allowed.append(t)
-                continue
-
-            # 2. Assigned by or created by this user/employee
-            if (emp_id and t.assigned_by_id == emp_id) or t.assigned_by_id == user.id or t.created_by_id == user.id:
-                allowed.append(t)
-                continue
-
-            # 3. Task matches employee's department
-            if t.department_id and t.department_id in emp_dept_ids:
-                allowed.append(t)
-                continue
-
-            # 4. Any assignee on the task belongs to employee's department
-            if emp_dept_ids and assignee_ids:
-                has_dept_assignee = False
-                for aid in assignee_ids:
-                    if emp_dept_map.get(aid, set()) & emp_dept_ids:
-                        has_dept_assignee = True
-                        break
-                if has_dept_assignee:
-                    allowed.append(t)
-                    continue
-
-        return allowed
+        # All authenticated users can view all tasks across the company
+        return tasks
 
     register_entity(
         bp,
@@ -728,10 +778,11 @@ def build_entities_blueprint():
         "tasks",
         create="any",
         update="any",
-        delete="owner_or_admin",
+        delete="any",
         list_filter=filter_tasks,
         before_create=validate_task_create,
         before_update=validate_task_update,
+        before_delete=validate_task_delete,
     )
 
     def filter_todo_items(todos, user):
