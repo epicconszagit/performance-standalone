@@ -315,21 +315,36 @@ export default function Layout() {
     );
   }
 
+  const hasMoreBadge = (
+    unreadCount > 0 ||
+    pendingApprovalsCount > 0 ||
+    reportsAttentionCount > 0 ||
+    announcementsAttentionCount > 0 ||
+    minutesAttentionCount > 0
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* Mobile overlay */}
       {sidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 lg:hidden transition-opacity duration-300"
+          onClick={() => setSidebarOpen(false)}
+        />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar Drawer */}
       <aside className={cn(
-        "fixed lg:sticky top-0 left-0 z-40 h-screen w-64 bg-[hsl(var(--sidebar-background))] flex flex-col shrink-0 transition-transform duration-300",
+        "fixed lg:sticky top-0 left-0 z-50 h-screen w-72 max-w-[85vw] lg:w-64 bg-[hsl(var(--sidebar-background))] flex flex-col shrink-0 transition-transform duration-300 ease-in-out shadow-2xl lg:shadow-none",
         sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
-        <div className="h-16 flex items-center justify-between border-b border-[hsl(var(--sidebar-border))] px-4">
+        <div className="h-16 flex items-center justify-between border-b border-[hsl(var(--sidebar-border))] px-4 shrink-0">
           <Logo />
-          <button className="lg:hidden text-slate-400" onClick={() => setSidebarOpen(false)}>
+          <button
+            className="lg:hidden text-slate-400 hover:text-white p-2 rounded-lg -mr-2 transition-colors"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close navigation menu"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -343,8 +358,9 @@ export default function Layout() {
                 key={item.path}
                 to={item.path}
                 end={item.path === "/"}
+                onClick={() => setSidebarOpen(false)}
                 className={({ isActive }) => cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all min-h-[42px]",
                   isActive
                     ? "bg-[hsl(var(--sidebar-accent))] text-white shadow-sm"
                     : "text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))]/50 hover:text-white"
@@ -362,14 +378,17 @@ export default function Layout() {
           })}
         </nav>
 
-        <div className="border-t border-[hsl(var(--sidebar-border))] p-3">
-          <div className="flex items-center gap-3 px-2 py-2 rounded-lg">
+        <div className="border-t border-[hsl(var(--sidebar-border))] p-3 shrink-0 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
+          <div className="flex items-center gap-3 px-2 py-2 rounded-lg bg-white/5">
             <button
-              onClick={() => navigate("/profile")}
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate("/profile");
+              }}
               className="flex items-center gap-3 flex-1 min-w-0 rounded-lg hover:bg-white/10 -mx-1 px-1 py-0.5 transition-colors text-left"
               title="View profile"
             >
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-sm font-bold text-slate-900 shrink-0 overflow-hidden">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-sm font-bold text-slate-900 shrink-0 overflow-hidden ring-1 ring-amber-400/40">
                 {employee?.avatar_url ? (
                   <img src={employee.avatar_url} alt="" className="w-full h-full object-cover" />
                 ) : initials}
@@ -379,7 +398,7 @@ export default function Layout() {
                 <p className="text-[10px] text-slate-400 truncate">{role}</p>
               </div>
             </button>
-            <button onClick={handleLogout} className="text-slate-400 hover:text-white p-1.5 rounded hover:bg-white/10 shrink-0" title="Logout">
+            <button onClick={handleLogout} className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-white/10 shrink-0 transition-colors" title="Logout">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
@@ -389,12 +408,33 @@ export default function Layout() {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Topbar */}
-        <header className="sticky top-0 z-20 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-6">
-          <div className="flex items-center gap-3">
-            <button className="lg:hidden text-slate-600" onClick={() => setSidebarOpen(true)}>
+        <header className="sticky top-0 z-20 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/90 flex items-center justify-between px-3.5 sm:px-4 lg:px-6">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <button
+              className="lg:hidden text-slate-700 hover:text-slate-900 p-2 -ml-1.5 rounded-lg hover:bg-slate-100 active:bg-slate-200 transition-colors"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open sidebar menu"
+            >
               <Menu className="w-6 h-6" />
             </button>
-            <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500">
+
+            {/* Mobile Header Branding */}
+            <div className="flex items-center gap-2 lg:hidden min-w-0">
+              <div className="w-7 h-7 rounded-full overflow-hidden bg-white shrink-0 ring-1 ring-amber-400/60 shadow-2xs">
+                <Image src={LOGO_URL} alt="EPIC" fittingType="fit" className="w-full h-full" />
+              </div>
+              <div className="leading-tight min-w-0">
+                <span className="font-heading font-black text-slate-900 text-xs tracking-wider uppercase truncate block">
+                  EPIC TASKS
+                </span>
+                <span className="text-[9px] text-amber-600 font-bold tracking-tight uppercase leading-none block">
+                  Operations Portal
+                </span>
+              </div>
+            </div>
+
+            {/* Desktop Banner */}
+            <div className="hidden lg:flex items-center gap-2 text-xs text-slate-500">
               <Shield className="w-3.5 h-3.5 text-amber-500" />
               <span className="font-semibold text-slate-800 tracking-wide uppercase text-[11px]">EPIC TASK PERFORMANCE TRACKING SYSTEM</span>
               <span className="text-slate-300">•</span>
@@ -402,39 +442,128 @@ export default function Layout() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               onClick={() => navigate("/notifications")}
-              className="relative p-2 rounded-lg hover:bg-slate-100 text-slate-600"
+              className="relative p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"
+              aria-label="Notifications"
             >
               <Bell className="w-5 h-5" />
               {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{unreadCount}</span>
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
+                  {unreadCount}
+                </span>
               )}
             </button>
-            <div className="w-px h-6 bg-slate-200 mx-1" />
+
+            <div className="w-px h-5 bg-slate-200 mx-0.5 sm:mx-1" />
+
             <button
               onClick={() => navigate("/profile")}
-              className="flex items-center gap-2 rounded-lg hover:bg-slate-100 px-1.5 py-1 -mx-1.5 transition-colors"
+              className="flex items-center gap-2 rounded-lg hover:bg-slate-100 p-1 sm:px-2 sm:py-1 transition-colors"
               title="View profile"
             >
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-xs font-bold text-white overflow-hidden shrink-0">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-xs font-bold text-white overflow-hidden shrink-0 ring-1 ring-slate-300">
                 {employee?.avatar_url ? (
                   <img src={employee.avatar_url} alt="" className="w-full h-full object-cover" />
                 ) : initials}
               </div>
               <div className="hidden sm:block leading-tight text-left">
-                <p className="text-sm font-semibold text-slate-800">{employee?.full_name || user?.full_name || "User"}</p>
-                <p className="text-[10px] text-slate-400">{role}</p>
+                <p className="text-xs sm:text-sm font-semibold text-slate-800 truncate max-w-[120px] lg:max-w-[160px]">
+                  {employee?.full_name || user?.full_name || "User"}
+                </p>
+                <p className="text-[10px] text-slate-400 truncate">{role}</p>
               </div>
             </button>
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-6 max-w-[1600px] w-full mx-auto">
+        {/* Page Content */}
+        <main className="flex-1 p-3.5 sm:p-5 lg:p-6 pb-24 lg:pb-8 max-w-[1600px] w-full mx-auto overflow-x-hidden">
           <Outlet context={{ user, employee, role, performer }} />
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-1.5 py-1 flex items-center justify-around shadow-[0_-4px_16px_rgba(0,0,0,0.06)] pb-[calc(0.35rem+env(safe-area-inset-bottom,0px))]">
+        <NavLink
+          to="/"
+          end
+          className={({ isActive }) => cn(
+            "flex flex-col items-center justify-center flex-1 py-1 rounded-lg text-[10px] font-medium transition-colors relative min-w-0",
+            isActive ? "text-amber-600 font-bold" : "text-slate-500 hover:text-slate-800"
+          )}
+        >
+          <LayoutDashboard className="w-5 h-5 mb-0.5" />
+          <span className="truncate">Home</span>
+        </NavLink>
+
+        <NavLink
+          to="/tasks"
+          className={({ isActive }) => cn(
+            "flex flex-col items-center justify-center flex-1 py-1 rounded-lg text-[10px] font-medium transition-colors relative min-w-0",
+            isActive ? "text-amber-600 font-bold" : "text-slate-500 hover:text-slate-800"
+          )}
+        >
+          <div className="relative">
+            <CheckSquare className="w-5 h-5 mb-0.5" />
+            {tasksAttentionCount > 0 && (
+              <span className="absolute -top-1 -right-2 bg-amber-500 text-slate-900 text-[9px] font-black px-1 rounded-full min-w-[14px] h-[14px] flex items-center justify-center leading-none">
+                {tasksAttentionCount}
+              </span>
+            )}
+          </div>
+          <span className="truncate">Tasks</span>
+        </NavLink>
+
+        <NavLink
+          to="/todos"
+          className={({ isActive }) => cn(
+            "flex flex-col items-center justify-center flex-1 py-1 rounded-lg text-[10px] font-medium transition-colors relative min-w-0",
+            isActive ? "text-amber-600 font-bold" : "text-slate-500 hover:text-slate-800"
+          )}
+        >
+          <ListTodo className="w-5 h-5 mb-0.5" />
+          <span className="truncate">To-Do</span>
+        </NavLink>
+
+        <NavLink
+          to="/meetings"
+          className={({ isActive }) => cn(
+            "flex flex-col items-center justify-center flex-1 py-1 rounded-lg text-[10px] font-medium transition-colors relative min-w-0",
+            isActive ? "text-amber-600 font-bold" : "text-slate-500 hover:text-slate-800"
+          )}
+        >
+          <div className="relative">
+            <CalendarDays className="w-5 h-5 mb-0.5" />
+            {meetingsAttentionCount > 0 && (
+              <span className="absolute -top-1 -right-2 bg-amber-500 text-slate-900 text-[9px] font-black px-1 rounded-full min-w-[14px] h-[14px] flex items-center justify-center leading-none">
+                {meetingsAttentionCount}
+              </span>
+            )}
+          </div>
+          <span className="truncate">Meetings</span>
+        </NavLink>
+
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(true)}
+          className={cn(
+            "flex flex-col items-center justify-center flex-1 py-1 rounded-lg text-[10px] font-medium transition-colors relative min-w-0",
+            sidebarOpen || ["/reports", "/performance", "/announcements", "/minutes", "/director", "/departmental-performance", "/settings", "/notifications"].some((p) => location.pathname.startsWith(p))
+              ? "text-amber-600 font-bold"
+              : "text-slate-500 hover:text-slate-800"
+          )}
+        >
+          <div className="relative">
+            <Menu className="w-5 h-5 mb-0.5" />
+            {hasMoreBadge && (
+              <span className="absolute -top-0.5 -right-1 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-white" />
+            )}
+          </div>
+          <span className="truncate">Menu</span>
+        </button>
+      </nav>
     </div>
   );
 }

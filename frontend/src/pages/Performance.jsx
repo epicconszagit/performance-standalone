@@ -220,29 +220,29 @@ export default function Performance() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-heading font-bold text-slate-900">Performance Management</h1>
-          <p className="text-sm text-slate-500 mt-1">Automatic performance evaluation and reporting</p>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">Automatic performance evaluation and reporting</p>
         </div>
         {isAdmin && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Select value={period} onValueChange={setPeriod}>
-              <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-[120px] sm:w-[130px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Monthly">Monthly</SelectItem>
                 <SelectItem value="Quarterly">Quarterly</SelectItem>
                 <SelectItem value="Annual">Annual</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={generateReport} className="bg-slate-800 hover:bg-slate-900">
+            <Button onClick={generateReport} className="bg-slate-800 hover:bg-slate-900 text-xs sm:text-sm shadow-xs">
               <FileText className="w-4 h-4 mr-1" /> Generate Report
             </Button>
-            <Button onClick={handleExportPDF} variant="outline" size="sm" disabled={!selectedEmployee}>
-              <Download className="w-4 h-4 mr-1" /> PDF
+            <Button onClick={handleExportPDF} variant="outline" size="sm" disabled={!selectedEmployee} className="text-xs">
+              <Download className="w-3.5 h-3.5 mr-1" /> PDF
             </Button>
-            <Button onClick={handleExportReportCSV} variant="outline" size="sm" disabled={!selectedEmployee}>
-              <Download className="w-4 h-4 mr-1" /> Excel
+            <Button onClick={handleExportReportCSV} variant="outline" size="sm" disabled={!selectedEmployee} className="text-xs">
+              <Download className="w-3.5 h-3.5 mr-1" /> Excel
             </Button>
           </div>
         )}

@@ -90,7 +90,7 @@ export default function TaskDetailsDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm transition-opacity"
       onClick={onClose}
     >
       <div
@@ -98,7 +98,7 @@ export default function TaskDetailsDialog({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4 bg-slate-50/70">
+        <div className="px-4 py-3.5 sm:px-6 sm:py-5 border-b border-slate-100 flex items-start justify-between gap-4 bg-slate-50/70">
           <div className="space-y-1.5 flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={effStatus} />
@@ -151,7 +151,7 @@ export default function TaskDetailsDialog({
         </div>
 
         {/* Scrollable Body */}
-        <div className="p-6 space-y-6 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-6 space-y-5 sm:space-y-6 overflow-y-auto flex-1">
           {/* Key Details Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {/* Department */}
@@ -444,7 +444,7 @@ export default function TaskDetailsDialog({
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 flex-wrap">
+        <div className="px-4 py-3 sm:px-6 sm:py-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
           {/* Left: Feedback Button */}
           <Button
             type="button"
@@ -454,7 +454,7 @@ export default function TaskDetailsDialog({
               onClose();
               if (onOpenFeedback) onOpenFeedback(task);
             }}
-            className="flex items-center gap-1.5 text-xs font-medium text-slate-700 border-slate-200 hover:bg-slate-100"
+            className="w-full sm:w-auto justify-center sm:justify-start flex items-center gap-1.5 text-xs font-medium text-slate-700 border-slate-200 hover:bg-slate-100"
           >
             <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
             <span>Discussion / Feedback</span>
@@ -466,7 +466,7 @@ export default function TaskDetailsDialog({
           </Button>
 
           {/* Right: Workflow Actions */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
             {/* Start Task for Assignee */}
             {isAssignee && task.status === "Pending" && (
               <Button

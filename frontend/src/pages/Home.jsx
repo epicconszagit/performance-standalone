@@ -106,29 +106,29 @@ export default function Home() {
   return (
     <div className="space-y-6">
       {/* Welcome banner */}
-      <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 lg:p-8 text-white relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full -translate-y-1/2 translate-x-1/4 blur-3xl" />
+      <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-5 sm:p-6 lg:p-8 text-white relative overflow-hidden shadow-sm">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full -translate-y-1/2 translate-x-1/4 blur-3xl pointer-events-none" />
         <div className="relative">
-          <p className="text-amber-400 text-sm font-medium uppercase tracking-wider">
+          <p className="text-amber-400 text-xs sm:text-sm font-semibold uppercase tracking-wider">
             {role}
           </p>
-          <h1 className="text-2xl lg:text-3xl font-bold mt-1 font-heading">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold mt-1 font-heading">
             Welcome back, {employee?.full_name || user?.full_name || "User"}
           </h1>
-          <p className="text-slate-400 mt-2 text-sm max-w-xl">
+          <p className="text-slate-400 mt-1.5 sm:mt-2 text-xs sm:text-sm max-w-xl">
             Track your tasks, department activities, and overall company operations in real time.
           </p>
-          <div className="flex flex-wrap gap-3 mt-4">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 mt-4">
             <button
               onClick={() => navigate(`/tasks?scope=${dashboardScope === "company" ? "all" : dashboardScope}`)}
-              className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-2"
+              className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold px-4 py-2 rounded-lg text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 shadow-xs"
             >
               <CheckSquare className="w-4 h-4" /> View Tasks
             </button>
             {isAdmin && (
               <button
                 onClick={() => navigate("/performance")}
-                className="bg-white/10 hover:bg-white/20 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors flex items-center gap-2"
+                className="bg-white/10 hover:bg-white/20 text-white font-medium px-4 py-2 rounded-lg text-xs sm:text-sm transition-colors flex items-center justify-center gap-2"
               >
                 <TrendingUp className="w-4 h-4" /> Performance Reports
               </button>
@@ -138,15 +138,15 @@ export default function Home() {
       </div>
 
       {/* Scope Selector Bar */}
-      <div className="bg-white rounded-xl border border-slate-200 p-3 flex flex-wrap items-center justify-between gap-3 shadow-xs">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">View:</span>
-          <div className="bg-slate-100 p-1 rounded-lg flex flex-wrap gap-1">
+      <div className="bg-white rounded-xl border border-slate-200 p-2.5 sm:p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 shadow-xs">
+        <div className="flex items-center gap-2 w-full sm:w-auto overflow-hidden">
+          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider shrink-0 hidden sm:inline">View:</span>
+          <div className="bg-slate-100 p-1 rounded-lg flex items-center gap-1 overflow-x-auto no-scrollbar w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setDashboardScope("mine")}
               className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all shrink-0 whitespace-nowrap",
                 dashboardScope === "mine"
                   ? "bg-blue-600 text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-200"
@@ -160,7 +160,7 @@ export default function Home() {
               type="button"
               onClick={() => setDashboardScope("department")}
               className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all shrink-0 whitespace-nowrap",
                 dashboardScope === "department"
                   ? "bg-purple-600 text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-200"
@@ -174,7 +174,7 @@ export default function Home() {
               type="button"
               onClick={() => setDashboardScope("company")}
               className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all shrink-0 whitespace-nowrap",
                 dashboardScope === "company"
                   ? "bg-slate-900 text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-200"
@@ -188,7 +188,7 @@ export default function Home() {
 
         <button
           onClick={() => navigate(`/tasks?scope=${dashboardScope === "company" ? "all" : dashboardScope}`)}
-          className="text-xs font-medium text-amber-600 hover:text-amber-700 flex items-center gap-1 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200 transition-colors"
+          className="text-xs font-medium text-amber-700 hover:text-amber-800 flex items-center justify-center gap-1 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg border border-amber-200 transition-colors shrink-0 self-stretch sm:self-auto"
         >
           Manage {scopeLabel} <ArrowRight className="w-3 h-3" />
         </button>

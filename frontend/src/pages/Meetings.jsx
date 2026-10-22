@@ -835,14 +835,14 @@ export default function Meetings() {
           </div>
         </div>
         {canAdminister && (
-          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0 shrink-0">
             <Button
               type="button"
               size="sm"
               variant="outline"
               onClick={handleSyncSchedule}
               disabled={syncingSchedule}
-              className="text-xs h-8 bg-white border-amber-300 hover:bg-amber-100 text-amber-900 font-medium"
+              className="text-xs h-8 bg-white border-amber-300 hover:bg-amber-100 text-amber-900 font-medium flex-1 sm:flex-initial"
             >
               {syncingSchedule ? "Aligning..." : "Sync to Mon/Wed/Fri"}
             </Button>
@@ -852,7 +852,7 @@ export default function Meetings() {
               variant="outline"
               onClick={handleNotifyStaff}
               disabled={notifyingStaff}
-              className="text-xs h-8 bg-white border-amber-300 hover:bg-amber-100 text-amber-900 font-medium"
+              className="text-xs h-8 bg-white border-amber-300 hover:bg-amber-100 text-amber-900 font-medium flex-1 sm:flex-initial"
             >
               {notifyingStaff ? "Notifying..." : "Notify Staff"}
             </Button>
@@ -861,7 +861,7 @@ export default function Meetings() {
       </div>
 
       {/* Filters and search */}
-      <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      <div className="space-y-3 bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div className="flex items-center bg-slate-100 p-1 rounded-lg self-start">
             <button
@@ -880,13 +880,13 @@ export default function Meetings() {
 
           <div className="relative max-w-md w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input value={minutesSearch} onChange={(e) => setMinutesSearch(e.target.value)} placeholder="Search meetings by title, venue, agenda..." className="pl-9" />
+            <Input value={minutesSearch} onChange={(e) => setMinutesSearch(e.target.value)} placeholder="Search meetings by title, venue, agenda..." className="pl-9 text-xs sm:text-sm" />
           </div>
         </div>
 
         {/* Secondary filter by meeting category */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
-          <span className="text-xs text-slate-400 mr-1 font-medium">Type:</span>
+        <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 overflow-x-auto no-scrollbar w-full">
+          <span className="text-xs text-slate-400 mr-1 font-medium shrink-0">Type:</span>
           {[
             { id: "all", label: "All Types", icon: Layers, color: "text-slate-600" },
             { id: "daily_morning", label: "Standups (Mon, Wed, Fri)", icon: Sun, color: "text-amber-600" },
@@ -906,7 +906,7 @@ export default function Meetings() {
                 key={tab.id}
                 onClick={() => setTypeFilter(tab.id)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all border",
+                  "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all border shrink-0 whitespace-nowrap",
                   isActive
                     ? "bg-slate-900 text-white border-slate-900 shadow-sm"
                     : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900"

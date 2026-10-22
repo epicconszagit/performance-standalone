@@ -663,18 +663,18 @@ export default function Tasks() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-heading font-bold text-slate-900">Tasks</h1>
-          <p className="text-sm text-slate-500 mt-1">View, track, and manage all assigned tasks across the organization</p>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">View, track, and manage all assigned tasks across the organization</p>
         </div>
-        <Button onClick={openCreate} className="bg-slate-800 hover:bg-slate-900">
+        <Button onClick={openCreate} className="bg-slate-800 hover:bg-slate-900 w-full sm:w-auto shadow-xs">
           <Plus className="w-4 h-4 mr-1" /> New Task
         </Button>
       </div>
 
       {/* Scope Selector: All / My Tasks / Department / Other Departments */}
-      <div className="bg-slate-100/90 p-1 rounded-xl flex flex-wrap gap-1 border border-slate-200">
+      <div className="bg-slate-100/90 p-1 rounded-xl flex items-center gap-1 border border-slate-200 overflow-x-auto no-scrollbar w-full sm:w-auto">
         <button
           type="button"
           onClick={() => {
@@ -682,7 +682,7 @@ export default function Tasks() {
             setSearchParams((prev) => { prev.set("scope", "all"); return prev; });
           }}
           className={cn(
-            "flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all",
+            "flex items-center gap-2 px-3 sm:px-3.5 py-2 rounded-lg text-xs font-semibold transition-all shrink-0 whitespace-nowrap",
             scopeFilter === "all"
               ? "bg-white text-slate-900 shadow-sm border border-slate-200"
               : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
@@ -702,7 +702,7 @@ export default function Tasks() {
             setSearchParams((prev) => { prev.set("scope", "mine"); return prev; });
           }}
           className={cn(
-            "flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all",
+            "flex items-center gap-2 px-3 sm:px-3.5 py-2 rounded-lg text-xs font-semibold transition-all shrink-0 whitespace-nowrap",
             scopeFilter === "mine"
               ? "bg-blue-600 text-white shadow-sm"
               : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
@@ -722,7 +722,7 @@ export default function Tasks() {
             setSearchParams((prev) => { prev.set("scope", "department"); return prev; });
           }}
           className={cn(
-            "flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all",
+            "flex items-center gap-2 px-3 sm:px-3.5 py-2 rounded-lg text-xs font-semibold transition-all shrink-0 whitespace-nowrap",
             scopeFilter === "department"
               ? "bg-purple-600 text-white shadow-sm"
               : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
@@ -742,7 +742,7 @@ export default function Tasks() {
             setSearchParams((prev) => { prev.set("scope", "other"); return prev; });
           }}
           className={cn(
-            "flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all",
+            "flex items-center gap-2 px-3 sm:px-3.5 py-2 rounded-lg text-xs font-semibold transition-all shrink-0 whitespace-nowrap",
             scopeFilter === "other"
               ? "bg-slate-800 text-white shadow-sm"
               : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
@@ -757,29 +757,29 @@ export default function Tasks() {
       </div>
 
       {/* Tabs */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
         {TABS.filter((tab) => !tab.adminOnly || isAdmin || isSecretary).map((tab) => {
           const Icon = tab.icon;
           return (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)}
               className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                activeTab === tab.key ? "bg-slate-800 text-white" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 whitespace-nowrap",
+                activeTab === tab.key ? "bg-slate-800 text-white shadow-xs" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
               )}>
               <Icon className="w-3.5 h-3.5" /> {tab.label}
-              <span className={cn("text-xs px-1.5 py-0.5 rounded-full", activeTab === tab.key ? "bg-white/20" : "bg-slate-100")}>{counts[tab.key]}</span>
+              <span className={cn("text-[10px] font-bold px-1.5 py-0.2 rounded-full", activeTab === tab.key ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600")}>{counts[tab.key]}</span>
             </button>
           );
         })}
       </div>
 
       {/* Search + view toggle */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="relative max-w-md flex-1 min-w-[200px]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="relative w-full sm:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks by title, description, or staff..." className="pl-9" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks by title, description, or staff..." className="pl-9 text-xs sm:text-sm" />
         </div>
-        <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1 self-end sm:self-auto shrink-0 shadow-2xs">
           <button onClick={() => setView("list")} className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors", view === "list" ? "bg-slate-800 text-white" : "text-slate-600 hover:bg-slate-100")}>
             <List className="w-3.5 h-3.5" /> List
           </button>
@@ -871,27 +871,27 @@ export default function Tasks() {
                           task.status === "In Progress" ? "bg-blue-500" :
                             isOverdue(task) ? "bg-red-500" : "bg-slate-300")} />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">{task.title}</h3>
+                            <h3 className="text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition-colors break-words">{task.title}</h3>
                             {scope === "mine" ? (
-                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 shrink-0">
                                 <User className="w-3 h-3" /> My Task
                               </span>
                             ) : scope === "department" ? (
-                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
+                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1 shrink-0">
                                 <Building2 className="w-3 h-3" /> Department
                               </span>
                             ) : (
-                              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1">
+                              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 flex items-center gap-1 shrink-0">
                                 <Users className="w-3 h-3" /> Other Dept
                               </span>
                             )}
                           </div>
                           {task.description && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{task.description}</p>}
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-auto flex-wrap">
                           <PriorityBadge priority={task.priority || "Medium"} />
                           <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded" title="Performance weight points">
                             {task.weight || (task.priority === "Urgent" ? 5 : task.priority === "High" ? 3 : task.priority === "Low" ? 1 : 2)} pts

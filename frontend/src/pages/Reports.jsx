@@ -404,10 +404,10 @@ export default function Reports() {
 
       {/* Tabs & Search Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 bg-slate-100/80 p-1 rounded-xl w-fit">
+        <div className="flex items-center gap-1.5 bg-slate-100/80 p-1 rounded-xl w-full sm:w-fit overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveTab("all")}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all shrink-0 whitespace-nowrap ${
               activeTab === "all"
                 ? "bg-white text-slate-900 shadow-sm"
                 : "text-slate-600 hover:text-slate-900"
@@ -417,7 +417,7 @@ export default function Reports() {
           </button>
           <button
             onClick={() => setActiveTab("confidential")}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
               activeTab === "confidential"
                 ? "bg-white text-amber-700 shadow-sm font-semibold"
                 : "text-slate-600 hover:text-amber-700"
@@ -429,7 +429,7 @@ export default function Reports() {
           {employee && (
             <button
               onClick={() => setActiveTab("to_me")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all shrink-0 whitespace-nowrap ${
                 activeTab === "to_me"
                   ? "bg-white text-slate-900 shadow-sm font-semibold"
                   : "text-slate-600 hover:text-slate-900"
@@ -440,7 +440,7 @@ export default function Reports() {
           )}
           <button
             onClick={() => setActiveTab("my_submissions")}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all shrink-0 whitespace-nowrap ${
               activeTab === "my_submissions"
                 ? "bg-white text-slate-900 shadow-sm font-semibold"
                 : "text-slate-600 hover:text-slate-900"

@@ -208,7 +208,7 @@ export default function Settings() {
         <p className="text-sm text-slate-500 mt-1">Organization structure, branding, and administration</p>
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200">
+      <div className="flex items-center gap-1 sm:gap-2 border-b border-slate-200 overflow-x-auto no-scrollbar flex-nowrap pb-px">
         {visibleTabs.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -216,9 +216,9 @@ export default function Settings() {
               key={tab.key}
               onClick={() => selectTab(tab.key)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+                "flex items-center gap-2 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 -mb-px transition-colors shrink-0 whitespace-nowrap",
                 activeTab === tab.key
-                  ? "border-amber-500 text-slate-900"
+                  ? "border-amber-500 text-slate-900 font-bold"
                   : "border-transparent text-slate-500 hover:text-slate-700"
               )}
             >

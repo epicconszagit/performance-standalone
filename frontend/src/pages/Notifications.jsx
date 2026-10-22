@@ -239,13 +239,13 @@ export default function Notifications() {
         {/* ========================================================================= */}
         <div className="lg:col-span-8 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           {/* Header */}
-          <div className="p-4 bg-amber-50/50 border-b border-amber-100 flex items-center justify-between gap-3">
+          <div className="p-3.5 sm:p-4 bg-amber-50/50 border-b border-amber-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs">
+              <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
                 <User className="w-4 h-4" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-base font-bold text-slate-900">My Notifications</h2>
                   {myUnreadCount > 0 ? (
                     <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500 text-white">
@@ -262,7 +262,7 @@ export default function Notifications() {
             </div>
 
             {/* Quick Filter: All vs Unread */}
-            <div className="flex items-center bg-white/80 p-0.5 rounded-lg border border-amber-200/80 text-xs">
+            <div className="flex items-center bg-white/80 p-0.5 rounded-lg border border-amber-200/80 text-xs self-start sm:self-auto">
               <button
                 onClick={() => setFilterMode("all")}
                 className={cn(

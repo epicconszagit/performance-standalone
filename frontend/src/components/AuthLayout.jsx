@@ -14,11 +14,11 @@ export default function AuthLayout({ icon: Icon, title, subtitle, footer, childr
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-heading">{title}</h1>
           {subtitle && <p className="text-slate-500 text-sm mt-1.5">{subtitle}</p>}
         </div>
-        <div className="bg-card rounded-2xl shadow-sm border border-border p-8">
+        <div className="bg-card rounded-2xl shadow-sm border border-border p-5 sm:p-8">
           {children}
         </div>
         {footer && (
-          <p className="text-center text-sm text-muted-foreground mt-6">{footer}</p>
+          <p className="text-center text-sm text-muted-foreground mt-5 sm:mt-6">{footer}</p>
         )}
       </div>
     </div>

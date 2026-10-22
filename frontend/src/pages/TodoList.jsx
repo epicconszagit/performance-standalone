@@ -249,11 +249,11 @@ export default function TodoList() {
 
       {/* Tabs (for managers/admins) */}
       {canViewTeam && (
-        <div className="flex border-b border-slate-200">
+        <div className="flex border-b border-slate-200 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveTab("my")}
             className={cn(
-              "pb-3 px-4 text-sm font-semibold flex items-center gap-2 border-b-2 transition-colors",
+              "pb-3 px-4 text-sm font-semibold flex items-center gap-2 border-b-2 transition-colors shrink-0 whitespace-nowrap",
               activeTab === "my"
                 ? "border-amber-500 text-amber-600"
                 : "border-transparent text-slate-500 hover:text-slate-800"
@@ -264,7 +264,7 @@ export default function TodoList() {
           <button
             onClick={() => setActiveTab("team")}
             className={cn(
-              "pb-3 px-4 text-sm font-semibold flex items-center gap-2 border-b-2 transition-colors",
+              "pb-3 px-4 text-sm font-semibold flex items-center gap-2 border-b-2 transition-colors shrink-0 whitespace-nowrap",
               activeTab === "team"
                 ? "border-amber-500 text-amber-600"
                 : "border-transparent text-slate-500 hover:text-slate-800"
@@ -348,7 +348,7 @@ export default function TodoList() {
       {activeTab === "team" && (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-wrap items-center gap-4">
           {!isDeptManagerOnly && (
-            <div className="w-48">
+            <div className="w-full sm:w-48">
               <Label className="text-xs text-slate-500">Department</Label>
               <Select value={selectedDeptId} onValueChange={(val) => { setSelectedDeptId(val); setSelectedEmpId("all"); }}>
                 <SelectTrigger className="mt-1 bg-white">
@@ -364,7 +364,7 @@ export default function TodoList() {
             </div>
           )}
 
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <Label className="text-xs text-slate-500">Select Team Member</Label>
             <Select value={selectedEmpId} onValueChange={setSelectedEmpId}>
               <SelectTrigger className="mt-1 bg-white">
@@ -398,11 +398,11 @@ export default function TodoList() {
       <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {/* Status filter chips */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto pb-1 sm:pb-0">
             <button
               onClick={() => setStatusFilter("all")}
               className={cn(
-                "px-3 py-1 rounded-lg text-xs font-semibold transition-colors",
+                "px-3 py-1 rounded-lg text-xs font-semibold transition-colors shrink-0 whitespace-nowrap",
                 statusFilter === "all" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               )}
             >
@@ -411,7 +411,7 @@ export default function TodoList() {
             <button
               onClick={() => setStatusFilter("active")}
               className={cn(
-                "px-3 py-1 rounded-lg text-xs font-semibold transition-colors",
+                "px-3 py-1 rounded-lg text-xs font-semibold transition-colors shrink-0 whitespace-nowrap",
                 statusFilter === "active" ? "bg-amber-500 text-slate-900" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               )}
             >
@@ -420,7 +420,7 @@ export default function TodoList() {
             <button
               onClick={() => setStatusFilter("completed")}
               className={cn(
-                "px-3 py-1 rounded-lg text-xs font-semibold transition-colors",
+                "px-3 py-1 rounded-lg text-xs font-semibold transition-colors shrink-0 whitespace-nowrap",
                 statusFilter === "completed" ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               )}
             >
@@ -596,12 +596,12 @@ export default function TodoList() {
 
       {/* Edit Dialog Modal */}
       {editingTodo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setEditingTodo(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50" onClick={() => setEditingTodo(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-heading font-bold text-slate-900">Edit To-Do Item</h3>
-              <button onClick={() => setEditingTodo(null)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-4 h-4" />
+              <button onClick={() => setEditingTodo(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-5 h-5" />
               </button>
             </div>
             <form onSubmit={handleSaveEdit} className="space-y-3">
@@ -621,7 +621,7 @@ export default function TodoList() {
                   rows={3}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label>Priority</Label>
                   <Select
