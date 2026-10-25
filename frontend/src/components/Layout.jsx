@@ -335,7 +335,7 @@ export default function Layout() {
 
       {/* Sidebar Drawer */}
       <aside className={cn(
-        "fixed lg:sticky top-0 left-0 z-50 h-screen w-72 max-w-[85vw] lg:w-64 bg-[hsl(var(--sidebar-background))] flex flex-col shrink-0 transition-transform duration-300 ease-in-out shadow-2xl lg:shadow-none",
+        "fixed inset-y-0 left-0 z-50 lg:z-30 h-screen w-72 max-w-[85vw] lg:w-64 bg-[hsl(var(--sidebar-background))] flex flex-col shrink-0 transition-transform duration-300 ease-in-out shadow-2xl lg:shadow-none lg:border-r lg:border-[hsl(var(--sidebar-border))]",
         sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
         <div className="h-16 flex items-center justify-between border-b border-[hsl(var(--sidebar-border))] px-4 shrink-0">
@@ -406,7 +406,7 @@ export default function Layout() {
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 w-full lg:pl-64">
         {/* Topbar */}
         <header className="sticky top-0 z-20 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/90 flex items-center justify-between px-3.5 sm:px-4 lg:px-6">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
