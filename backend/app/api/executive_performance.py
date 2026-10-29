@@ -346,6 +346,14 @@ def get_executive_department_performance():
     total_net_all = round(total_rev_all - total_exp_all, 2)
     total_target_all = round(sum(d["annual_budget_target"] for d in department_metrics), 2)
 
+    # If no overall company budget record is explicitly saved yet, default to sum of allocated department budgets
+    if overall_company_budget <= 0 and total_allocated_all > 0:
+        overall_company_budget = total_allocated_all
+        for d in department_metrics:
+            d["share_of_company_budget_pct"] = round(
+                (d["allocated_budget"] / overall_company_budget) * 100, 1
+            )
+
     # Unallocated reserve from overall company budget
     unallocated_budget = round(overall_company_budget - total_allocated_all, 2)
     allocation_pct = round((total_allocated_all / overall_company_budget) * 100, 1) if overall_company_budget > 0 else 0.0
