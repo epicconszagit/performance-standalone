@@ -42,6 +42,9 @@ export const PerformanceOverview = {
 };
 export const ExecutivePerformance = {
   getOverview: () => apiClient.get("/executive/department-performance"),
+  getCompanyBudget: () => apiClient.get("/executive/company-budget"),
+  saveCompanyBudget: (data) => apiClient.post("/executive/company-budget", data),
+  extractDepartmentalBudgets: (data) => apiClient.post("/executive/extract-departmental-budgets", data),
   updateBudget: (deptId, data) => apiClient.patch(`/executive/departments/${deptId}/budget`, data),
   updateTarget: (deptId, data) => apiClient.patch(`/executive/departments/${deptId}/target`, data),
   listFinancialRecords: (params) => apiClient.get("/executive/financial-records", { params }),

@@ -365,5 +365,20 @@ class DepartmentFinancialRecord(BaseModel):
     recorded_by_name = db.Column(db.String(255))
 
 
+class CompanyBudget(BaseModel):
+    __tablename__ = "company_budgets"
+
+    fiscal_year = db.Column(db.String(20), nullable=False, default="2026")
+    title = db.Column(db.String(255), nullable=False, default="FY 2026 Master Corporate Budget")
+    total_budget = db.Column(db.Float, nullable=False, default=0.0)
+    currency = db.Column(db.String(10), default="USD")
+    notes = db.Column(db.Text)
+    budget_file_url = db.Column(db.String(500))
+    budget_file_name = db.Column(db.String(255))
+    updated_by_id = db.Column(db.String(36))
+    updated_by_name = db.Column(db.String(255))
+
+
+
 
 

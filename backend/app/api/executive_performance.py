@@ -4,11 +4,18 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 
 from ..extensions import db
-from ..models import Department, Employee, Task, AuditLog, DepartmentFinancialRecord
+from ..models import Department, Employee, Task, AuditLog, DepartmentFinancialRecord, CompanyBudget
 from ..utils.performance import calculate_weighted_performance, is_task_overdue
 from .generic import current_user
 
 executive_performance_bp = Blueprint("executive_performance", __name__)
+
+
+def _ensure_company_budget_table():
+    try:
+        CompanyBudget.__table__.create(db.engine, checkfirst=True)
+    except Exception:
+        pass
 
 
 def _is_executive_authorized(user):
@@ -20,9 +27,9 @@ def _is_executive_authorized(user):
     if getattr(user, "role", "") == "admin":
         return True
 
-    # 2. Designated administrative email
-    email = (getattr(user, "email", "") or "").lower()
-    if email == "epiccons.za@gmail.com":
+    # 2. Designated administrative / executive emails
+    email = (getattr(user, "email", "") or "").lower().strip()
+    if email in ("epiccons.za@gmail.com", "cmutovhe@epicnetworkgroup.com", "ceo.test@epicnetworkgroup.com"):
         return True
 
     # 3. Employee record role & executive position checks
@@ -60,6 +67,14 @@ def _safe_json_list(val):
     return []
 
 
+def _get_active_company_budget():
+    _ensure_company_budget_table()
+    try:
+        return CompanyBudget.query.order_by(CompanyBudget.updated_date.desc()).first()
+    except Exception:
+        return None
+
+
 @executive_performance_bp.route("/executive/department-performance", methods=["GET"])
 @jwt_required()
 def get_executive_department_performance():
@@ -69,8 +84,13 @@ def get_executive_department_performance():
 
     if not _is_executive_authorized(user):
         return jsonify({
-            "error": "Access Denied: This strategic department revenue and target tracker is restricted exclusively to the Super Administrator and Chief Executive Officer."
+            "error": "Access Denied: This strategic department revenue and budget tracker is restricted exclusively to the Super Administrator and Chief Executive Officer."
         }), 403
+
+    company_budget_rec = _get_active_company_budget()
+    overall_company_budget = float(company_budget_rec.total_budget or 0.0) if company_budget_rec else 0.0
+    master_currency = (company_budget_rec.currency if company_budget_rec and company_budget_rec.currency else "USD")
+    master_fiscal_year = (company_budget_rec.fiscal_year if company_budget_rec and company_budget_rec.fiscal_year else "2026")
 
     # Query all active/valid records
     all_departments = Department.query.filter(
@@ -136,13 +156,51 @@ def get_executive_department_performance():
         logged_revenue = sum(float(r.amount) for r in dept_records if r.record_type == "revenue")
         logged_expenses = sum(float(r.amount) for r in dept_records if r.record_type == "expense")
 
-        # Fallback to direct fields if no ledger entries exist yet
-        total_revenue = logged_revenue if logged_revenue > 0 else float(getattr(dept, "revenue_generated", 0.0) or 0.0)
-        total_expenses = logged_expenses if logged_expenses > 0 else float(getattr(dept, "actual_spend", 0.0) or 0.0)
+        # Breakdown of expenses by category for this department
+        expense_categories_map = {}
+        for r in dept_records:
+            if r.record_type == "expense":
+                cat = r.category or "General"
+                expense_categories_map[cat] = round(expense_categories_map.get(cat, 0.0) + float(r.amount or 0.0), 2)
+        expenses_by_category = [
+            {"category": k, "amount": v}
+            for k, v in sorted(expense_categories_map.items(), key=lambda item: item[1], reverse=True)
+        ]
 
-        annual_target = float(getattr(dept, "annual_budget_target", 0.0) or getattr(dept, "allocated_budget", 0.0) or 0.0)
-        budget_currency = getattr(dept, "budget_currency", "USD") or "USD"
-        fiscal_year = getattr(dept, "fiscal_year", "2026") or "2026"
+        # Fallback to direct fields if no ledger entries exist yet
+        total_revenue = round(logged_revenue if logged_revenue > 0 else float(getattr(dept, "revenue_generated", 0.0) or 0.0), 2)
+        total_expenses = round(logged_expenses if logged_expenses > 0 else float(getattr(dept, "actual_spend", 0.0) or 0.0), 2)
+
+        # Departmental Budget extracted from Overall Company Budget
+        allocated_budget = round(float(getattr(dept, "allocated_budget", 0.0) or 0.0), 2)
+        # Departmental Revenue Target
+        annual_target = round(float(getattr(dept, "annual_budget_target", 0.0) or 0.0), 2)
+
+        budget_currency = getattr(dept, "budget_currency", master_currency) or master_currency
+        fiscal_year = getattr(dept, "fiscal_year", master_fiscal_year) or master_fiscal_year
+
+        # Budget Spending / Utilization Calculations (Expenses vs Extracted Dept Budget)
+        remaining_budget = round(allocated_budget - total_expenses, 2)
+        if allocated_budget > 0:
+            budget_utilization_pct = round((total_expenses / allocated_budget) * 100, 1)
+        else:
+            budget_utilization_pct = 0.0
+
+        if overall_company_budget > 0:
+            share_of_company_budget_pct = round((allocated_budget / overall_company_budget) * 100, 1)
+        else:
+            share_of_company_budget_pct = 0.0
+
+        if allocated_budget <= 0 and total_expenses > 0:
+            spending_status = "Unbudgeted Spend"
+        elif allocated_budget <= 0:
+            spending_status = "No Budget Extracted"
+        elif total_expenses > allocated_budget:
+            spending_status = "Over Budget"
+        elif budget_utilization_pct >= 85:
+            spending_status = "Near Limit"
+        else:
+            spending_status = "Within Budget"
 
         net_contribution = round(total_revenue - total_expenses, 2)
 
@@ -160,7 +218,7 @@ def get_executive_department_performance():
             profit_margin_pct = 0.0
             expense_ratio = 0.0
 
-        # Effort Yield: Revenue brought in per completed task
+        # Effort Yield: Revenue brought in & Cost per completed task
         if completed_tasks_count > 0:
             revenue_per_task = round(total_revenue / completed_tasks_count, 2)
             cost_per_task = round(total_expenses / completed_tasks_count, 2)
@@ -168,7 +226,7 @@ def get_executive_department_performance():
             revenue_per_task = 0.0
             cost_per_task = 0.0
 
-        # Status Tag
+        # Revenue Target Status Tag
         if annual_target <= 0:
             target_status = "No Target Configured"
         elif target_progress_pct >= 100:
@@ -181,12 +239,16 @@ def get_executive_department_performance():
             target_status = "Lagging Target"
 
         # Comprehensive Contribution Index (DPCI 0-100)
-        # 40% Target fulfillment, 30% Net Profit health, 30% Task Execution
-        target_score = min(100.0, target_progress_pct)
-        profit_score = 100.0 if net_contribution >= 0 else max(0.0, 100.0 - (abs(net_contribution) / (annual_target or 10000.0) * 100.0))
+        budget_discipline_score = (
+            100.0 if (allocated_budget > 0 and total_expenses <= allocated_budget)
+            else max(0.0, 100.0 - ((total_expenses - allocated_budget) / (allocated_budget or 10000.0) * 100.0))
+            if allocated_budget > 0 else 75.0
+        )
+        target_score = min(100.0, target_progress_pct) if annual_target > 0 else budget_discipline_score
+        profit_score = 100.0 if net_contribution >= 0 else max(0.0, 100.0 - (abs(net_contribution) / (allocated_budget or annual_target or 10000.0) * 100.0))
         exec_score = task_score
 
-        dpci = round((0.40 * target_score) + (0.30 * profit_score) + (0.30 * exec_score), 1)
+        dpci = round((0.35 * budget_discipline_score) + (0.35 * target_score) + (0.30 * exec_score), 1)
 
         if dpci >= 85:
             tier = "Tier 1: High Producer"
@@ -206,12 +268,18 @@ def get_executive_department_performance():
                 "manager_name": dept.manager_name or "Unassigned",
                 "manager_id": dept.manager_id,
             },
-            # Financial Target & Contribution
-            "annual_budget_target": annual_target,
-            "allocated_budget": annual_target,  # backwards compatibility
-            "total_revenue": total_revenue,
+            # Extracted Budget & Spending Metrics
+            "allocated_budget": allocated_budget,
+            "share_of_company_budget_pct": share_of_company_budget_pct,
             "total_expenses": total_expenses,
-            "actual_spend": total_expenses,     # backwards compatibility
+            "actual_spend": total_expenses,
+            "remaining_budget": remaining_budget,
+            "budget_utilization_pct": budget_utilization_pct,
+            "spending_status": spending_status,
+            "expenses_by_category": expenses_by_category,
+            # Revenue Target & Inflow Metrics
+            "annual_budget_target": annual_target,
+            "total_revenue": total_revenue,
             "net_contribution": net_contribution,
             "target_progress_pct": target_progress_pct,
             "profit_margin_pct": profit_margin_pct,
@@ -219,7 +287,7 @@ def get_executive_department_performance():
             "budget_currency": budget_currency,
             "fiscal_year": fiscal_year,
             "target_status": target_status,
-            "budget_status": target_status,     # backwards compatibility
+            "budget_status": spending_status,
             # Work Output & Effort
             "tasks_count": total_tasks_count,
             "completed_tasks": completed_tasks_count,
@@ -242,29 +310,56 @@ def get_executive_department_performance():
                     "recorded_by_name": r.recorded_by_name or "",
                     "created_date": r.created_date.isoformat() if r.created_date else None,
                 }
-                for r in dept_records[:5]
+                for r in dept_records[:25]
             ],
             "total_transactions_count": len(dept_records),
         })
 
-    # Rank departments by Total Revenue Brought In
+    # Rank departments by Allocated Budget, Revenue, and Profit
+    sorted_by_budget = sorted(department_metrics, key=lambda x: x["allocated_budget"], reverse=True)
+    for rank, item in enumerate(sorted_by_budget, start=1):
+        item["rank_budget"] = rank
+
     sorted_by_revenue = sorted(department_metrics, key=lambda x: x["total_revenue"], reverse=True)
     for rank, item in enumerate(sorted_by_revenue, start=1):
         item["rank_revenue"] = rank
 
-    # Rank departments by Net Profit / Contribution
     sorted_by_profit = sorted(department_metrics, key=lambda x: x["net_contribution"], reverse=True)
     for rank, item in enumerate(sorted_by_profit, start=1):
         item["rank_profit"] = rank
 
-    # Sort final metrics list by revenue by default
-    department_metrics = sorted_by_revenue
+    sorted_by_spending = sorted(department_metrics, key=lambda x: x["total_expenses"], reverse=True)
+    for rank, item in enumerate(sorted_by_spending, start=1):
+        item["rank_spending"] = rank
 
-    # Corporate-Wide Summary
+    # Default sort: by allocated budget (or revenue if budgets are equal)
+    department_metrics = sorted(
+        department_metrics,
+        key=lambda x: (x["allocated_budget"], x["total_revenue"], x["total_expenses"]),
+        reverse=True,
+    )
+
+    # Corporate-Wide Budget & Financial Summary
+    total_allocated_all = round(sum(d["allocated_budget"] for d in department_metrics), 2)
     total_rev_all = round(sum(d["total_revenue"] for d in department_metrics), 2)
     total_exp_all = round(sum(d["total_expenses"] for d in department_metrics), 2)
     total_net_all = round(total_rev_all - total_exp_all, 2)
     total_target_all = round(sum(d["annual_budget_target"] for d in department_metrics), 2)
+
+    # Unallocated reserve from overall company budget
+    unallocated_budget = round(overall_company_budget - total_allocated_all, 2)
+    allocation_pct = round((total_allocated_all / overall_company_budget) * 100, 1) if overall_company_budget > 0 else 0.0
+
+    # Remaining spendable budgets
+    remaining_overall_budget = round(overall_company_budget - total_exp_all, 2)
+    remaining_allocated_budget = round(total_allocated_all - total_exp_all, 2)
+
+    overall_burn_pct = round((total_exp_all / overall_company_budget) * 100, 1) if overall_company_budget > 0 else 0.0
+    allocated_burn_pct = round((total_exp_all / total_allocated_all) * 100, 1) if total_allocated_all > 0 else 0.0
+
+    over_budget_depts_count = sum(
+        1 for d in department_metrics if d["allocated_budget"] > 0 and d["total_expenses"] > d["allocated_budget"]
+    )
 
     overall_progress = round((total_rev_all / total_target_all * 100), 1) if total_target_all > 0 else 0.0
     overall_profit_margin = round((total_net_all / total_rev_all * 100), 1) if total_rev_all > 0 else 0.0
@@ -272,11 +367,38 @@ def get_executive_department_performance():
     total_tasks_completed_all = sum(d["completed_tasks"] for d in department_metrics)
     avg_rev_per_task = round(total_rev_all / total_tasks_completed_all, 2) if total_tasks_completed_all > 0 else 0.0
 
-    top_earner = department_metrics[0] if department_metrics and department_metrics[0]["total_revenue"] > 0 else None
+    top_earner = sorted_by_revenue[0] if sorted_by_revenue and sorted_by_revenue[0]["total_revenue"] > 0 else None
     top_profit = sorted_by_profit[0] if sorted_by_profit and sorted_by_profit[0]["net_contribution"] > 0 else None
+    highest_spender = sorted_by_spending[0] if sorted_by_spending and sorted_by_spending[0]["total_expenses"] > 0 else None
+
+    company_budget_dict = {
+        "id": company_budget_rec.id if company_budget_rec else None,
+        "is_configured": bool(company_budget_rec and company_budget_rec.total_budget > 0),
+        "fiscal_year": master_fiscal_year,
+        "title": company_budget_rec.title if company_budget_rec and company_budget_rec.title else f"FY {master_fiscal_year} Master Corporate Budget",
+        "total_budget": overall_company_budget,
+        "currency": master_currency,
+        "notes": (company_budget_rec.notes or "") if company_budget_rec else "",
+        "budget_file_url": (company_budget_rec.budget_file_url or "") if company_budget_rec else "",
+        "budget_file_name": (company_budget_rec.budget_file_name or "") if company_budget_rec else "",
+        "updated_by_name": (company_budget_rec.updated_by_name or "") if company_budget_rec else "",
+        "updated_date": company_budget_rec.updated_date.isoformat() if (company_budget_rec and company_budget_rec.updated_date) else None,
+    }
 
     return jsonify({
+        "company_budget": company_budget_dict,
         "summary": {
+            # Master Budget & Extraction Totals
+            "overall_company_budget": overall_company_budget,
+            "total_allocated_budget": total_allocated_all,
+            "unallocated_budget": unallocated_budget,
+            "allocation_pct": allocation_pct,
+            "remaining_overall_budget": remaining_overall_budget,
+            "remaining_allocated_budget": remaining_allocated_budget,
+            "overall_burn_pct": overall_burn_pct,
+            "allocated_burn_pct": allocated_burn_pct,
+            "over_budget_depts_count": over_budget_depts_count,
+            # Revenue, Expense & Net Totals
             "total_revenue": total_rev_all,
             "total_expenses": total_exp_all,
             "net_contribution": total_net_all,
@@ -288,9 +410,266 @@ def get_executive_department_performance():
             "department_count": len(department_metrics),
             "top_earning_dept": top_earner,
             "top_profit_dept": top_profit,
+            "highest_spending_dept": highest_spender,
         },
         "departments": department_metrics,
     })
+
+
+@executive_performance_bp.route("/executive/company-budget", methods=["GET", "POST", "PUT", "PATCH"])
+@jwt_required()
+def manage_company_budget():
+    user = current_user()
+    if not user or not _is_executive_authorized(user):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    _ensure_company_budget_table()
+    rec = _get_active_company_budget()
+
+    if request.method == "GET":
+        if not rec:
+            return jsonify({
+                "company_budget": {
+                    "id": None,
+                    "is_configured": False,
+                    "fiscal_year": "2026",
+                    "title": "FY 2026 Master Corporate Budget",
+                    "total_budget": 0.0,
+                    "currency": "USD",
+                    "notes": "",
+                    "budget_file_url": "",
+                    "budget_file_name": "",
+                }
+            })
+        return jsonify({"company_budget": rec.to_dict()})
+
+    data = request.get_json(silent=True) or {}
+    try:
+        total_budget = max(0.0, float(data.get("total_budget") or 0.0))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Please provide a valid numeric overall budget amount."}), 400
+
+    fiscal_year = (data.get("fiscal_year") or "2026").strip()
+    title = (data.get("title") or f"FY {fiscal_year} Master Corporate Budget").strip()
+    currency = (data.get("currency") or "USD").strip()
+    notes = (data.get("notes") or "").strip()
+    budget_file_url = data.get("budget_file_url")
+    budget_file_name = data.get("budget_file_name")
+
+    performer_name = getattr(user, "full_name", "") or getattr(user, "email", "CEO / Executive")
+
+    if not rec:
+        rec = CompanyBudget(
+            fiscal_year=fiscal_year,
+            title=title,
+            total_budget=total_budget,
+            currency=currency,
+            notes=notes,
+            budget_file_url=budget_file_url or "",
+            budget_file_name=budget_file_name or "",
+            updated_by_id=user.id,
+            updated_by_name=performer_name,
+        )
+        db.session.add(rec)
+    else:
+        rec.fiscal_year = fiscal_year
+        rec.title = title
+        rec.total_budget = total_budget
+        rec.currency = currency
+        rec.notes = notes
+        if budget_file_url is not None:
+            rec.budget_file_url = budget_file_url
+        if budget_file_name is not None:
+            rec.budget_file_name = budget_file_name
+        rec.updated_by_id = user.id
+        rec.updated_by_name = performer_name
+
+    # Optionally apply departmental budget extractions if provided in the same payload
+    allocations = data.get("allocations")
+    extracted_count = 0
+    if isinstance(allocations, list):
+        for item in allocations:
+            dept_id = item.get("department_id")
+            dept_name = (item.get("department_name") or "").strip()
+            dept = None
+            if dept_id:
+                dept = Department.query.get(dept_id)
+            elif dept_name:
+                dept = Department.query.filter(db.func.lower(Department.name) == dept_name.lower()).first()
+            if dept:
+                if "allocated_budget" in item and item["allocated_budget"] is not None:
+                    try:
+                        dept.allocated_budget = max(0.0, round(float(item["allocated_budget"]), 2))
+                        extracted_count += 1
+                    except (ValueError, TypeError):
+                        pass
+                if "annual_budget_target" in item and item["annual_budget_target"] is not None:
+                    try:
+                        dept.annual_budget_target = max(0.0, round(float(item["annual_budget_target"]), 2))
+                    except (ValueError, TypeError):
+                        pass
+                dept.fiscal_year = fiscal_year
+                dept.budget_currency = currency
+
+    db.session.commit()
+
+    try:
+        details = f"Set Overall Company Budget ({title}) to ${total_budget:,.2f}"
+        if budget_file_name:
+            details += f" [Uploaded file: {budget_file_name}]"
+        if extracted_count > 0:
+            details += f" and extracted budgets for {extracted_count} department(s)"
+        audit = AuditLog(
+            action="Updated Overall Company Budget",
+            entity_type="CompanyBudget",
+            entity_id=rec.id,
+            entity_name=title,
+            performed_by_id=user.id,
+            performed_by_name=performer_name,
+            details=details,
+        )
+        db.session.add(audit)
+        db.session.commit()
+    except Exception:
+        pass
+
+    return jsonify({
+        "message": f"Overall company budget updated to ${total_budget:,.2f}.",
+        "company_budget": rec.to_dict(),
+    }), 200
+
+
+@executive_performance_bp.route("/executive/extract-departmental-budgets", methods=["POST"])
+@jwt_required()
+def extract_departmental_budgets():
+    user = current_user()
+    if not user or not _is_executive_authorized(user):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.get_json(silent=True) or {}
+    allocations = data.get("allocations") or []
+    if not isinstance(allocations, list) or len(allocations) == 0:
+        return jsonify({"error": "Please provide departmental budget allocations to extract."}), 400
+
+    performer_name = getattr(user, "full_name", "") or getattr(user, "email", "CEO / Executive")
+
+    # Optionally update overall company budget if passed alongside extraction
+    if "overall_budget" in data and data["overall_budget"] is not None:
+        try:
+            new_overall = max(0.0, float(data["overall_budget"]))
+            rec = _get_active_company_budget()
+            if not rec:
+                rec = CompanyBudget(
+                    fiscal_year="2026",
+                    title="FY 2026 Master Corporate Budget",
+                    total_budget=new_overall,
+                    currency="USD",
+                    updated_by_id=user.id,
+                    updated_by_name=performer_name,
+                )
+                db.session.add(rec)
+            else:
+                rec.total_budget = new_overall
+                rec.updated_by_id = user.id
+                rec.updated_by_name = performer_name
+        except (ValueError, TypeError):
+            pass
+
+    updated_depts = []
+    total_extracted = 0.0
+
+    for item in allocations:
+        dept_id = item.get("department_id")
+        dept_name = (item.get("department_name") or "").strip()
+        dept = None
+        if dept_id:
+            dept = Department.query.get(dept_id)
+        elif dept_name:
+            dept = Department.query.filter(
+                (db.func.lower(Department.name) == dept_name.lower()) |
+                (db.func.lower(Department.code) == dept_name.lower())
+            ).first()
+
+        if not dept:
+            continue
+
+        if "allocated_budget" in item and item["allocated_budget"] is not None:
+            try:
+                amt = max(0.0, round(float(item["allocated_budget"]), 2))
+                dept.allocated_budget = amt
+                total_extracted += amt
+                updated_depts.append(f"{dept.name}: ${amt:,.2f}")
+            except (ValueError, TypeError):
+                pass
+
+        if "annual_budget_target" in item and item["annual_budget_target"] is not None:
+            try:
+                dept.annual_budget_target = max(0.0, round(float(item["annual_budget_target"]), 2))
+            except (ValueError, TypeError):
+                pass
+
+    db.session.commit()
+
+    try:
+        audit = AuditLog(
+            action="Extracted Departmental Budgets",
+            entity_type="CompanyBudget",
+            entity_id="bulk-extraction",
+            entity_name="Departmental Budget Allocation",
+            performed_by_id=user.id,
+            performed_by_name=performer_name,
+            details=f"Extracted ${total_extracted:,.2f} across {len(updated_depts)} department(s): " + "; ".join(updated_depts[:8]),
+        )
+        db.session.add(audit)
+        db.session.commit()
+    except Exception:
+        pass
+
+    return jsonify({
+        "message": f"Successfully extracted departmental budgets for {len(updated_depts)} department(s).",
+        "updated_count": len(updated_depts),
+        "total_extracted": round(total_extracted, 2),
+    }), 200
+
+
+@executive_performance_bp.route("/executive/departments/<dept_id>/budget", methods=["PATCH"])
+@jwt_required()
+def update_department_budget(dept_id):
+    user = current_user()
+    if not user or not _is_executive_authorized(user):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    dept = Department.query.get(dept_id)
+    if not dept:
+        return jsonify({"error": "Department not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    try:
+        if "allocated_budget" in data and data["allocated_budget"] is not None:
+            dept.allocated_budget = max(0.0, round(float(data.get("allocated_budget") or 0.0), 2))
+        if "annual_budget_target" in data and data["annual_budget_target"] is not None:
+            dept.annual_budget_target = max(0.0, round(float(data.get("annual_budget_target") or 0.0), 2))
+        db.session.commit()
+
+        performer_name = getattr(user, "full_name", "") or getattr(user, "email", "Executive")
+        audit = AuditLog(
+            action="Updated Extracted Department Budget",
+            entity_type="Department",
+            entity_id=dept.id,
+            entity_name=dept.name,
+            performed_by_id=user.id,
+            performed_by_name=performer_name,
+            details=f"Extracted budget for {dept.name} set to ${dept.allocated_budget:,.2f} (Revenue target: ${dept.annual_budget_target:,.2f})",
+        )
+        db.session.add(audit)
+        db.session.commit()
+
+        return jsonify({
+            "message": f"Extracted budget for {dept.name} updated to ${dept.allocated_budget:,.2f}.",
+            "department": dept.to_dict(),
+        }), 200
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid budget amount"}), 400
 
 
 @executive_performance_bp.route("/executive/financial-records", methods=["GET"])
@@ -461,24 +840,25 @@ def update_department_target(dept_id):
 
     data = request.get_json(silent=True) or {}
     try:
-        new_target = max(0.0, float(data.get("annual_budget_target") or data.get("allocated_budget") or 0.0))
-        dept.annual_budget_target = new_target
-        dept.allocated_budget = new_target  # keep in sync
+        if "annual_budget_target" in data and data["annual_budget_target"] is not None:
+            dept.annual_budget_target = max(0.0, round(float(data.get("annual_budget_target") or 0.0), 2))
+        if "allocated_budget" in data and data["allocated_budget"] is not None:
+            dept.allocated_budget = max(0.0, round(float(data.get("allocated_budget") or 0.0), 2))
         db.session.commit()
 
         performer_name = getattr(user, "full_name", "") or getattr(user, "email", "Executive")
         audit = AuditLog(
-            action="Updated Annual Budget Target",
+            action="Updated Department Budget & Target",
             entity_type="Department",
             entity_id=dept.id,
             entity_name=dept.name,
             performed_by_id=user.id,
             performed_by_name=performer_name,
-            details=f"Annual target set to ${new_target:,.2f}",
+            details=f"Extracted Budget: ${dept.allocated_budget:,.2f} | Revenue Target: ${dept.annual_budget_target:,.2f}",
         )
         db.session.add(audit)
         db.session.commit()
 
-        return jsonify({"message": f"Annual target for {dept.name} updated to ${new_target:,.2f}.", "department": dept.to_dict()}), 200
+        return jsonify({"message": f"Updated budget settings for {dept.name}.", "department": dept.to_dict()}), 200
     except (ValueError, TypeError):
-        return jsonify({"error": "Invalid annual target amount"}), 400
+        return jsonify({"error": "Invalid budget or target amount"}), 400

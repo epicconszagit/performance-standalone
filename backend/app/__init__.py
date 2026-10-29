@@ -75,6 +75,9 @@ def create_app(config_class=Config):
             if "department_financial_records" not in tables:
                 from .models import DepartmentFinancialRecord
                 DepartmentFinancialRecord.__table__.create(db.engine, checkfirst=True)
+            if "company_budgets" not in tables:
+                from .models import CompanyBudget
+                CompanyBudget.__table__.create(db.engine, checkfirst=True)
         except Exception as e:
             app.logger.warning("Database self-healing notice: %s", e)
 
